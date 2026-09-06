@@ -2,21 +2,6 @@
 
 Reviewed: 4 September 2026
 
-## Executive take on the deck
-
-The proposed system combines an XGBoost tabular model with a DistilBERT text model and a late-fusion classification head, exposed through FastAPI and Docker with a sub-100 ms latency target. The basic architecture is credible, but the current deck treats a model prototype as if it were already a compliant credit-decision system.
-
-The strongest part of the pitch is the decision to combine cash-flow or behavioral variables with transaction text. The largest gaps are:
-
-1. **The outcome is not yet defined.** Specify the target (for example, 30+ days past due within 90 days), observation window, performance window, approval policy, and the unit of prediction.
-2. **Synthetic data cannot validate credit risk.** It is useful for plumbing, load tests, privacy-safe demos, and perhaps pre-training, but final model selection and claims about inclusion require representative borrowers and observed repayment outcomes.
-3. **SHAP is not compliance.** SHAP explains model behavior relative to a background distribution. It does not by itself prove fairness, causal validity, stability, or that an adverse-action reason is legally accurate.
-4. **The evaluation plan is too narrow.** Include a logistic-regression scorecard, XGBoost-only, text-only, and simple-concatenation baselines; ablate each modality; and use out-of-time validation.
-5. **Credit models need probability quality, not only ranking.** Report AUROC and PR-AUC, but also Brier score or log loss, calibration plots, approval-rate/bad-rate curves, expected loss or profit, subgroup results, and confidence intervals.
-6. **The latency claim needs an SLO.** Define p50/p95/p99 end-to-end latency, concurrency, hardware, sequence length, cold-start behavior, batch size, and whether preprocessing and SHAP generation are inside the 100 ms budget.
-7. **BNPL has hidden-liability risk.** Loan stacking across providers and incomplete reporting mean the engine may not observe the borrower's full short-term debt burden.
-8. **Missing production controls:** data lineage and consent, protected-class proxy testing, model inventory, independent validation, drift and delayed-label monitoring, versioning, rollback, human escalation, security, and adverse-action reason testing.
-
 ## Core reading - everyone
 
 Read these first. They establish the business problem and prevent the team from optimizing an architecture before agreeing on the risk problem.
@@ -186,28 +171,3 @@ Read 12-19. Produce a model card, data sheet, fairness test plan, adverse-action
 ### Session 5 - Engineer and benchmark
 
 Read 20-22. Set a measurable SLO and benchmark the full path, including tokenization, preprocessing, both model tracks, fusion, explanation generation, serialization, and network overhead.
-
-## What to put in the public repository
-
-The repository is public. Upload this reading list, but link to the publisher-hosted copies of the documents rather than mirroring every PDF. Several publications are copyrighted or have source-specific license terms; public availability is not the same as permission to redistribute. For any PDF you want to mirror, verify the license on that exact version first and record the source URL, retrieval date, license, and checksum.
-
-Recommended repository structure:
-
-```text
-docs/
-  reading-list.md
-  model-card-template.md
-  data-sheet-template.md
-  validation-plan.md
-  adverse-action-reason-policy.md
-```
-
-## Immediate deck revisions
-
-1. Replace “Traditional FICO scores turn away legitimate users” with a narrower, evidence-backed statement about credit-invisible and thin-file applicants.
-2. Add a slide defining the prediction target, repayment horizon, data availability cutoff, and decision policy.
-3. Add a slide with baselines, validation design, metrics, subgroup tests, and expected-loss evaluation.
-4. Replace “SHAP explainability to satisfy strict financial regulations” with “validated decision reasons, fairness testing, documentation, and governance; SHAP is one diagnostic input.”
-5. Add BNPL loan-stacking and incomplete-liability visibility as first-class risks.
-6. Define the 100 ms target as a percentile SLO on specified hardware and separate the decision path from slower explanation or audit processing if necessary.
-7. Add data provenance, consent, privacy, model governance, monitoring, human review, and rollback to the architecture and timeline.
