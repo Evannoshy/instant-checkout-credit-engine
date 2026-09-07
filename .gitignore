@@ -1,0 +1,59 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Data: only documentation and reviewed synthetic fixtures belong in Git
+data/raw/
+data/interim/
+data/processed/
+data/external/
+!data/README.md
+!data/fixtures/
+!data/fixtures/**
+
+# Models, experiment stores and generated reports
+artifacts/**
+!artifacts/README.md
+models/
+mlruns/
+wandb/
+optuna*.db
+*.joblib
+*.pkl
+*.pickle
+*.onnx
+*.ubj
+*.xgb
+
+# Local logs and temporary outputs
+logs/
+tmp/
+temp/
+*.log
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
