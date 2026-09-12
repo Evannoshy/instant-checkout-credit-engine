@@ -1,0 +1,28 @@
+{
+  "dataset": "Lending Club Loan Data CSV",
+  "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+  "archive_sha256": "c6255f6a8099b25303360976597fd8f86ae9087176598692a5a37dd8dc3339a1",
+  "split_version": "split-v1",
+  "split_method": "chronological_by_issue_month",
+  "cohort": "real_text_matured_v1",
+  "raw_rows": 2260668,
+  "eligible_rows": 122999,
+  "invalid_eligible_dates": 0,
+  "splits": {
+    "train": {
+      "rows": 86293,
+      "defaults": 13197,
+      "default_rate": 0.1529324510678734
+    },
+    "validation": {
+      "rows": 21784,
+      "defaults": 3298,
+      "default_rate": 0.15139551964744766
+    },
+    "test": {
+      "rows": 14922,
+      "defaults": 2390,
+      "default_rate": 0.1601661975606487
+    }
+  }
+}
