@@ -4,8 +4,6 @@
 
 Use issues and pull requests for all project work. Keep changes small enough to review, and link model or data claims to reproducible evidence.
 
-Tabular-track contributors must follow the [Tabular Analyst Handbook](docs/tabular-analyst-handbook.md). Accepted decision records take precedence when project requirements change.
-
 ## Before starting
 
 1. Confirm the issue has an owner, outcome and acceptance criteria.
