@@ -1,0 +1,12 @@
+# Verified with Python 3.14.6. Run from the repository root:
+# python -m pip install -r src/nlp/requirements.txt
+pandas==3.0.5
+numpy==2.5.3
+matplotlib==3.11.2
+transformers==5.17.0
+tokenizers==0.23.2
+huggingface-hub==1.31.0
+pytest==9.1.1
+nbformat==5.11.1
+nbclient==0.11.0
+ipykernel==7.3.0
