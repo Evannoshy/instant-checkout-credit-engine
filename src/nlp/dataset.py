@@ -20,7 +20,7 @@ tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
 
 
 class LoanTextDataset(Dataset):
-    """Tokenizes loan text payloads on the fly; labels come from ``target``."""
+    """Tokenizes loan text payloads on the fly. Labels come from ``target``."""
 
     def __init__(
         self, df: pd.DataFrame, tokenizer: DistilBertTokenizerFast, max_length: int = MAX_LENGTH
@@ -33,11 +33,8 @@ class LoanTextDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx: int) -> Mapping[str, torch.Tensor]:
-        """Turn one row of text into token IDs, ready for the model.
-
-        We don't pad here on purpose each batch gets padded later to match
-        its own longest sequence, so we're not wasting space padding every
-        row all the way up to max_length.
+        """Encodes a row's text into token IDs, attention mask and label tensors.
+        Returns unpadded data, that should be externally with dyanmic per-batch padding.
 
         Args:
             idx: Positional row index requested by the DataLoader.
