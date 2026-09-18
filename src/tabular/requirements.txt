@@ -1,0 +1,8 @@
+# Tabular track. Verified with Python 3.13.9. Run from the repository root:
+# python -m pip install -r src/tabular/requirements.txt
+pandas==3.0.5
+numpy==2.5.3
+scikit-learn==1.9.1
+scipy==1.18.1
+joblib==1.6.0
+pytest==9.1.1
