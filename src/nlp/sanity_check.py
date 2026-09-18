@@ -31,6 +31,7 @@ def run_batch(label: str, df, model) -> None:
     loader = DataLoader(
         dataset,
         batch_size=BATCH_SIZE,
+        shuffle=True,
         collate_fn=DataCollatorWithPadding(tokenizer),  # pad every row to this batch's longest row
     )
     batch = next(iter(loader))
