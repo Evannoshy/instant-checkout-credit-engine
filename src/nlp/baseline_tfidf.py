@@ -144,6 +144,9 @@ def top_ngrams(
 ) -> pd.DataFrame:
     """Rank n-grams by signed coefficient, with training document frequency.
 
+    Returns ``k`` higher-risk rows then ``k`` lower-risk rows, each block
+    ordered strongest association first: most positive, then most negative.
+
     Document frequency is reported so a term carried by few loans is not read
     as a finding. Coefficients are descriptive associations: magnitudes depend
     on IDF scaling and split across correlated n-grams, so they do not identify
