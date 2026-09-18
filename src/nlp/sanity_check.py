@@ -14,18 +14,20 @@ Runs two batches:
 
 from pathlib import Path
 
+import torch
 from torch.utils.data import DataLoader
-from transformers import DataCollatorWithPadding, DistilBertForSequenceClassification
+from transformers import DataCollatorWithPadding, DistilBertForSequenceClassification, DistilBertTokenizerFast
 
-from src.nlp.dataset import MAX_LENGTH, LoanTextDataset, tokenizer
+from src.nlp.dataset import MAX_LENGTH, LoanTextDataset
 from src.nlp.preprocess import load_original_split
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 SAMPLE_ROWS = 500
 BATCH_SIZE = 16
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def run_batch(label: str, df, model) -> None:
+def run_batch(label: str, df, model, tokenizer) -> None:
     """Tokenize df as one batch and run it through the model forward + backward."""
     dataset = LoanTextDataset(df, tokenizer)
     loader = DataLoader(
@@ -35,6 +37,7 @@ def run_batch(label: str, df, model) -> None:
         collate_fn=DataCollatorWithPadding(tokenizer),  # pad every row to this batch's longest row
     )
     batch = next(iter(loader))
+    batch = {k: v.to(DEVICE) for k, v in batch.items()}
 
     print(f"\n=== {label} ===")
     num_rows, num_tokens = batch["input_ids"].shape
@@ -47,13 +50,15 @@ def run_batch(label: str, df, model) -> None:
 
 
 def main() -> None:
+    print(f"Using device: {DEVICE}")
     df = load_original_split(DATA_DIR, "train")
 
+    tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     model = DistilBertForSequenceClassification.from_pretrained(
         "distilbert-base-uncased", num_labels=2
-    )
+    ).to(DEVICE)
 
-    run_batch(f"Check the first {SAMPLE_ROWS} rows", df.head(SAMPLE_ROWS), model)
+    run_batch(f"Check the first {SAMPLE_ROWS} rows", df.head(SAMPLE_ROWS), model, tokenizer)
 
     # A word count above MAX_LENGTH is well over the token count so they are guaranteed 
     # to need truncation.
@@ -63,7 +68,7 @@ def main() -> None:
 
     run_batch(
         f"Check {BATCH_SIZE} longest real descriptions (tests whether MAX_LENGTH={MAX_LENGTH} triggers an OOM)",
-        long_batch, model,
+        long_batch, model, tokenizer,
     )
     print(f"\nResult: batch_size={BATCH_SIZE} at max_length={MAX_LENGTH} ran with no crash, using real long borrower text.")
 

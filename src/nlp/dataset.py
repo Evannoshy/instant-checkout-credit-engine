@@ -16,8 +16,6 @@ from transformers import DistilBertTokenizerFast
 
 MAX_LENGTH = 384 # Set to 128 in-case of OOM error
 
-tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
-
 
 class LoanTextDataset(Dataset):
     """Tokenizes loan text payloads on the fly. Labels come from ``target``."""
@@ -34,7 +32,7 @@ class LoanTextDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Mapping[str, torch.Tensor]:
         """Encodes a row's text into token IDs, attention mask and label tensors.
-        Returns unpadded data, that should be externally with dyanmic per-batch padding.
+        Returns unpadded data. Padding is applied externally, dynamically per batch.
 
         Args:
             idx: Positional row index requested by the DataLoader.
