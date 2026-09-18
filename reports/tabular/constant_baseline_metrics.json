@@ -5,7 +5,7 @@
   "dataset_version": "kaggle-adarshsng-local-2026-09-09",
   "split_version": "split-v1",
   "cohort": "real_text_matured_v1",
-  "test_set_accessed": false,
+  "test_rows_available_to_model": 0,
   "train": {
     "rows": 86293,
     "positives": 13197,
