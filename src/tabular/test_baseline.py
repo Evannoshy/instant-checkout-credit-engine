@@ -51,7 +51,7 @@ def artificial_data_dir(tmp_path):
                 "2013-01", "2013-02", "2013-03", "2013-04",
                 "2013-08", "2013-08", "2014-01", "2014-01",
             ],
-            "target": [0, 1, 0, 0, 1, 0, 1, 0],
+            "target": [0, 1, 0, 0, 1, 0, "LOCKED_A", "LOCKED_B"],
             "text_available": [1, 1, 1, 1, 1, 1, 1, 1],
             "cohort": ["real_text_matured_v1"] * 8,
             "dataset_version": ["kaggle-adarshsng-local-2026-09-09"] * 8,
@@ -96,12 +96,15 @@ def test_run_predictions_cover_every_validation_loan_id_exactly_once(artificial_
     assert result["predictions"]["loan_id"].is_unique
 
 
-def test_run_never_calls_get_split_targets_with_test_split(artificial_data_dir, tmp_path, monkeypatch):
-    """run() never requests the locked test split from the manifest."""
+def test_run_receives_no_test_rows_or_test_labels(artificial_data_dir, tmp_path, monkeypatch):
+    """The model pipeline receives only development rows and redacted statistics."""
     requested_splits: list[str] = []
     real_get_split_targets = evaluate.get_split_targets
 
     def spy(manifest, split):
+        assert "test" not in set(manifest["split"])
+        assert "LOCKED_A" not in set(manifest["target"].astype(str))
+        assert "LOCKED_B" not in set(manifest["target"].astype(str))
         requested_splits.append(split)
         return real_get_split_targets(manifest, split)
 
@@ -111,12 +114,12 @@ def test_run_never_calls_get_split_targets_with_test_split(artificial_data_dir, 
     assert set(requested_splits) == {"train", "validation"}
 
 
-def test_run_metrics_json_includes_test_set_not_accessed_confirmation(artificial_data_dir, tmp_path):
-    """The written metrics JSON carries an explicit test_set_accessed: false field."""
+def test_run_metrics_json_records_computed_test_row_exposure(artificial_data_dir, tmp_path):
+    """The metrics record the computed number of test rows exposed to the model."""
     output_dir = tmp_path / "out"
     baseline.run(artificial_data_dir, output_dir)
     metrics = json.loads((output_dir / "constant_baseline_metrics.json").read_text(encoding="utf-8"))
-    assert metrics["test_set_accessed"] is False
+    assert metrics["test_rows_available_to_model"] == 0
 
 
 def test_run_metrics_json_has_train_and_validation_sections_with_expected_keys(
@@ -154,5 +157,5 @@ def test_run_on_real_data_produces_the_documented_training_default_rate(tmp_path
     metrics = result["metrics"]
     assert metrics["train"]["default_rate"] == pytest.approx(13197 / 86293)
     assert metrics["validation"]["rows"] == 21784
-    assert metrics["test_set_accessed"] is False
+    assert metrics["test_rows_available_to_model"] == 0
     assert len(result["predictions"]) == 21784

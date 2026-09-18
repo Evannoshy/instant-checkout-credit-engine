@@ -4,9 +4,9 @@ every validation loan.
 Establishes the minimum-viable floor prescribed by
 docs/tabular-analyst-handbook.md §12.3's "minimum experiment ladder"
 ("Approve-all, decline-all and prevalence predictor" is step 1) that any
-later logistic-regression or XGBoost model must beat. Fits only on train,
-scores only validation, and never loads, evaluates, or otherwise accesses
-the locked test split.
+later logistic-regression or XGBoost model must beat. Fits only on train and
+scores only validation. The shared loader returns no test rows or test-label
+aggregates to this model pipeline.
 
 Run from the repository root:
     python -m src.tabular.baseline
@@ -55,11 +55,14 @@ def run(data_dir: str | Path, output_dir: str | Path) -> dict[str, Any]:
     CSV and the metrics JSON to `output_dir`. Returns
     {"predictions": DataFrame, "metrics": dict}.
 
-    Only "train" and "validation" are ever requested from the manifest; the
-    metrics JSON records an explicit "test_set_accessed": false field as a
-    written, machine-checkable confirmation of that guarantee.
+    Only train and validation rows are returned by the loader. The metrics JSON
+    records the computed number of test rows available to this model pipeline;
+    execution fails if that number is not zero.
     """
     manifest, stats = load_manifest(data_dir)
+    test_rows_available = int(manifest["split"].eq("test").sum())
+    if test_rows_available:
+        raise RuntimeError("Locked test rows were exposed to the model-development pipeline")
     train_targets = get_split_targets(manifest, "train")
     validation_targets = get_split_targets(manifest, "validation")
 
@@ -86,7 +89,7 @@ def run(data_dir: str | Path, output_dir: str | Path) -> dict[str, Any]:
         "dataset_version": stats["dataset_version"],
         "split_version": stats.get("split_version"),
         "cohort": stats["cohort"],
-        "test_set_accessed": False,
+        "test_rows_available_to_model": test_rows_available,
         "train": {
             "rows": len(train_targets),
             "positives": int(train_targets["target"].sum()),

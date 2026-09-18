@@ -15,6 +15,7 @@ invariant (text_available, description non-emptiness).
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -48,23 +49,25 @@ PREDICTION_COLUMNS = ("loan_id", "split", "p_default_tabular", "model_name", "mo
 
 
 def load_manifest(data_dir: str | Path) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Load and validate data/split_manifest.csv against split_statistics.json.
+    """Load the model-development portion of the locked split manifest.
 
-    Checks required columns, missing metadata, unknown split values, id/count
-    uniqueness, the loan_id/source_row_number convention, binary target and
-    text_available flags, and row-count/cohort/dataset-version agreement with
-    split_statistics.json. Raises ValueError with a specific message for the
-    first violation found. Never opens data/raw/loan.csv.
+    Structural checks cover every split, but target validation and the returned
+    frame are restricted to train and validation. Test rows and test-label
+    aggregates are removed before anything is returned to model code. Raises
+    ValueError with a specific message for the first violation found. Never
+    opens data/raw/loan.csv.
 
-    Returns (manifest, stats) so callers get dataset_version/split_version
-    without re-reading split_statistics.json themselves.
+    Returns (development_manifest, redacted_stats). The source manifest is the
+    repository's locked split registry and currently contains all split rows;
+    this boundary prevents its test targets from being exposed downstream.
     """
     data_dir = Path(data_dir)
     manifest = pd.read_csv(data_dir / "split_manifest.csv", dtype={"loan_id": "string"})
 
     if missing := REQUIRED_MANIFEST_COLUMNS - set(manifest.columns):
         raise ValueError(f"Manifest is missing columns: {sorted(missing)}")
-    if manifest[list(REQUIRED_MANIFEST_COLUMNS)].isna().any().any():
+    structural_columns = list(REQUIRED_MANIFEST_COLUMNS - {"target"})
+    if manifest[structural_columns].isna().any().any():
         raise ValueError("Manifest contains missing required metadata")
     if not manifest["split"].isin(ALLOWED_SPLIT_VALUES).all():
         raise ValueError("Manifest has an unknown split")
@@ -77,10 +80,15 @@ def load_manifest(data_dir: str | Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     expected_ids = numbers.map(lambda n: f"lc_{int(n):09d}")
     if not manifest["loan_id"].eq(expected_ids).all():
         raise ValueError("loan_id does not match the manifest source-row convention")
-    if not manifest["target"].isin([0, 1]).all():
-        raise ValueError("Manifest targets must be binary")
     if not manifest["text_available"].isin([0, 1]).all():
         raise ValueError("Manifest text_available must be binary")
+
+    development_mask = manifest["split"].isin(LOADABLE_SPLITS)
+    development_manifest = manifest.loc[development_mask].copy()
+    development_targets = pd.to_numeric(development_manifest["target"], errors="coerce")
+    if development_targets.isna().any() or not development_targets.isin([0, 1]).all():
+        raise ValueError("Train and validation targets must be binary")
+    development_manifest["target"] = development_targets.astype("int8")
 
     with (data_dir / "split_statistics.json").open(encoding="utf-8") as stream:
         stats = json.load(stream)
@@ -94,7 +102,12 @@ def load_manifest(data_dir: str | Path) -> tuple[pd.DataFrame, dict[str, Any]]:
     if not manifest["dataset_version"].eq(stats["dataset_version"]).all():
         raise ValueError("Manifest dataset version disagrees with split statistics")
 
-    return manifest, stats
+    redacted_stats = copy.deepcopy(stats)
+    test_stats = redacted_stats.get("splits", {}).get("test")
+    if isinstance(test_stats, dict) and "rows" in test_stats:
+        redacted_stats["splits"]["test"] = {"rows": test_stats["rows"]}
+
+    return development_manifest.reset_index(drop=True), redacted_stats
 
 
 def get_split_targets(manifest: pd.DataFrame, split: str) -> pd.DataFrame:

@@ -50,7 +50,7 @@ def artificial_data_dir(tmp_path):
             "source_row_number": [1, 2, 3, 4],
             "split": ["train", "train", "validation", "test"],
             "issue_month": ["2013-01", "2013-02", "2013-08", "2014-01"],
-            "target": [0, 1, 0, 1],
+            "target": [0, 1, 0, "LOCKED_TEST_LABEL"],
             "text_available": [1, 1, 1, 1],
             "cohort": ["real_text_matured_v1"] * 4,
             "dataset_version": ["kaggle-adarshsng-local-2026-09-09"] * 4,
@@ -76,10 +76,20 @@ def artificial_data_dir(tmp_path):
 
 
 def test_load_manifest_accepts_a_well_formed_manifest(artificial_data_dir):
-    """A well-formed manifest loads and returns matching stats."""
+    """A well-formed manifest returns development rows and redacted stats."""
     manifest, stats = load_manifest(artificial_data_dir)
-    assert len(manifest) == 4
+    assert len(manifest) == 3
+    assert set(manifest["split"]) == {"train", "validation"}
+    assert stats["splits"]["test"] == {"rows": 1}
     assert stats["split_version"] == "split-v1"
+
+
+def test_load_manifest_does_not_expose_or_validate_test_targets(artificial_data_dir):
+    """An intentionally non-binary test sentinel is never returned or validated."""
+    manifest, stats = load_manifest(artificial_data_dir)
+    assert "test" not in set(manifest["split"])
+    assert "LOCKED_TEST_LABEL" not in set(manifest["target"].astype(str))
+    assert set(stats["splits"]["test"]) == {"rows"}
 
 
 @pytest.mark.parametrize("column", sorted({"loan_id", "split", "target", "cohort", "dataset_version"}))
@@ -341,5 +351,8 @@ def test_evaluate_predictions_returns_exactly_the_specified_metric_keys():
 def test_load_manifest_on_real_data_matches_split_statistics():
     """The real, tracked manifest loads and its training default rate matches the frozen cohort."""
     manifest, stats = load_manifest(REAL_DATA_DIR)
-    assert len(manifest) == stats["eligible_rows"] == 122999
+    assert len(manifest) == 86293 + 21784
+    assert stats["eligible_rows"] == 122999
+    assert set(manifest["split"]) == {"train", "validation"}
+    assert set(stats["splits"]["test"]) == {"rows"}
     assert training_default_rate(manifest) == pytest.approx(13197 / 86293)
