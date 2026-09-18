@@ -29,22 +29,28 @@ minimum floor that the upcoming logistic-regression baseline must beat.
   rate, predicts it uniformly for every validation loan, validates and evaluates the result, and
   writes the two artifacts below.
 
-## 3. Test-set non-access — written confirmation
+## 3. Test-label isolation
 
-**The locked `test` split was not loaded, evaluated, or used for any decision in this baseline.**
-This is guaranteed three ways, not asserted by prose alone:
+The source `split_manifest.csv` is the repository's shared split registry and contains metadata
+for all three splits. The model-development loader now returns **only train and validation rows**.
+It validates targets only for those two splits and removes test outcome aggregates from the
+statistics object before returning it to model code.
 
-1. **Structurally:** `evaluate.get_split_targets` recognizes only `"train"` and `"validation"`;
-   requesting `"test"` raises `ValueError("Only train and validation are available; the final test
-   set is locked.")` — the same message used by `src/nlp/preprocess.load_original_split`.
-   `baseline.run()` never calls it with `"test"`.
-2. **Tested:** `src/tabular/test_evaluate.py::test_get_split_targets_rejects_test_split_with_the_shared_lock_message`
-   asserts the guard directly; `src/tabular/test_baseline.py::test_run_never_calls_get_split_targets_with_test_split`
-   spies on every split requested by `run()` and asserts `"test"` never appears among them.
-3. **Written:** every run's `constant_baseline_metrics.json` records an explicit
-   `"test_set_accessed": false` field (see §5). Additionally, no code under `src/tabular/` ever
-   references `data/raw/loan.csv` — confirmed by inspection (`grep -rn raw src/tabular/` returns
-   only docstring mentions stating that it is never opened).
+This boundary is verified three ways:
+
+1. **Structurally:** `load_manifest()` returns no row whose split is `test`;
+   `get_split_targets()` also refuses a direct `"test"` request.
+2. **Tested:** the synthetic fixture places non-binary sentinel strings in the test target cells.
+   Loading and running the baseline succeed, while tests assert that neither the test rows nor the
+   sentinel values reach model code. Tests also assert that returned test statistics contain only
+   the mechanical row count.
+3. **Measured:** every run records `"test_rows_available_to_model": 0`, calculated from the
+   returned frame. The baseline fails immediately if that count is non-zero; it is not a hard-coded
+   statement of compliance.
+
+The baseline does not evaluate, tune on, or make any decision from test outcomes. A future
+data-contract revision should physically separate final-test labels from the shared manifest;
+until then, this loader is the enforced model-development boundary.
 
 ## 4. Method
 
@@ -85,7 +91,8 @@ its added complexity.
   `loan_id,split,p_default_tabular,model_name,model_version`; every `p_default_tabular` equals
   0.1529324510678734; every `loan_id` is unique and covers the validation split exactly.
 - `reports/tabular/constant_baseline_metrics.json` — the full metrics object shown in §5, plus
-  `dataset_version`, `split_version`, `cohort`, `test_set_accessed`, and `environment` metadata.
+  `dataset_version`, `split_version`, `cohort`, `test_rows_available_to_model`, and `environment`
+  metadata.
 - Both were verified to be byte-identical across repeated runs (no timestamps or randomness in the
   constant model), so committing them is reproducible.
 
@@ -99,7 +106,7 @@ python -m pytest src/tabular/test_evaluate.py src/tabular/test_baseline.py -v -s
 python -m src.tabular.baseline
 ```
 
-43 tests pass (34 in `test_evaluate.py`, 9 in `test_baseline.py`), including one real-data
+44 tests pass (35 in `test_evaluate.py`, 9 in `test_baseline.py`), including one real-data
 regression check in each file that reads the real `data/split_manifest.csv` and
 `data/split_statistics.json` directly (never `data/raw/loan.csv`) and asserts the training default
 rate equals `13197 / 86293` exactly.
