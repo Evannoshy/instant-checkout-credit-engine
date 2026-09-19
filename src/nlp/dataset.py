@@ -8,9 +8,9 @@ max_length=384, with dynamic padding per batch rather than a fixed length per ro
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 import pandas as pd
-import torch
 from torch.utils.data import Dataset
 from transformers import DistilBertTokenizerFast
 
@@ -30,15 +30,16 @@ class LoanTextDataset(Dataset):
     def __len__(self) -> int:
         return len(self.df)
 
-    def __getitem__(self, idx: int) -> Mapping[str, torch.Tensor]:
-        """Encodes a row's text into token IDs, attention mask and label tensors.
-        Returns unpadded data. Padding is applied externally, dynamically per batch.
+    def __getitem__(self, idx: int) -> Mapping[str, Any]:
+        """Encodes a row's text into token IDs, attention mask and a label.
+        Returns unpadded Python lists/int. DataCollatorWithPadding converts to
+        padded tensors at batch time.
 
         Args:
             idx: Positional row index requested by the DataLoader.
 
         Returns:
-            A dict with input_ids, attention_mask, and labels tensors for one row.
+            A dict with input_ids, attention_mask, and labels for one row.
         """
         row = self.df.iloc[idx]
         encoding = self.tokenizer(
@@ -48,7 +49,7 @@ class LoanTextDataset(Dataset):
             padding=False,
         )
         return {
-            "input_ids": torch.tensor(encoding["input_ids"], dtype=torch.long),
-            "attention_mask": torch.tensor(encoding["attention_mask"], dtype=torch.long),
-            "labels": torch.tensor(row["target"], dtype=torch.long),
+            "input_ids": encoding["input_ids"],
+            "attention_mask": encoding["attention_mask"],
+            "labels": int(row["target"]),
         }
