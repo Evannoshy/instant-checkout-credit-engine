@@ -119,3 +119,34 @@ The suite contains 14 checks and all 14 pass against the artefacts in section 2.
 | All three split counts match the locked values | Met | Section 4; 86,293, 21,784 and 14,922 confirmed in both sources |
 | No missing, duplicate or overlapping IDs are found | Met | Section 5; all identifier checks clean |
 
+
+
+## 9. Cohort reproduction and DQ-01 resolution
+
+**Resolution date:** 19 September 2026  
+**Status:** Resolved
+
+The original v1 eligibility and split rules are now frozen in
+`configs/cohort_v1.toml`, documented in `docs/cohort-definition.md` and implemented
+by the read-only `scripts/reproduce_locked_cohort.py` audit.
+
+Two local ZIP packages were examined:
+
+- `loan.csv.zip` has SHA-256
+  `c6255f6a8099b25303360976597fd8f86ae9087176598692a5a37dd8dc3339a1`.
+- `archive.zip` has SHA-256
+  `e5de55438920e393443d6212946cd6a0954664e952cdb3683c5607c8beb192f1`
+  because it also contains `LCDataDictionary.xlsx`.
+
+Both archives contain a byte-identical `loan.csv` with SHA-256
+`23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c`.
+The raw CSV hash is now recorded in `data/split_statistics.json` as the
+content-level source identity. DQ-01 is therefore closed; the earlier archive
+mismatch reflected packaging, not different loan data.
+
+The reproduction audit scanned 2,260,668 raw rows and produced exactly 122,999
+eligible rows: 86,293 train, 21,784 validation and 14,922 test. Comparison against
+`data/split_manifest.csv` found zero missing IDs, zero extra IDs and zero mismatches
+in source row, split, issue month, target, text availability, cohort or dataset
+version. Machine-readable evidence is stored in
+`reports/data/cohort_reproduction_v1.json`.
