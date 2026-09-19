@@ -1,0 +1,48 @@
+{
+  "checks": {
+    "eligible_row_count": true,
+    "exact_id_set": true,
+    "exact_row_contract": true,
+    "expected_split_counts": true,
+    "literal_marker_count": true,
+    "manifest_ids_unique": true,
+    "manifest_split_counts": true,
+    "raw_csv_sha256": true,
+    "raw_row_count": true,
+    "reconstructed_ids_unique": true,
+    "statistics_dataset_version": true,
+    "statistics_eligible_rows": true,
+    "statistics_split_counts": true
+  },
+  "cohort_version": "real_text_matured_v1",
+  "diagnostics": {
+    "eligible_rows": 122999,
+    "literal_missing_marker_descriptions": 4,
+    "raw_rows": 2260668
+  },
+  "evidence_date": "2026-09-19",
+  "extra_id_count": 0,
+  "field_mismatch_counts": {
+    "cohort": 0,
+    "dataset_version": 0,
+    "issue_month": 0,
+    "source_row_number": 0,
+    "split": 0,
+    "target": 0,
+    "text_available": 0
+  },
+  "manifest_split_rows": {
+    "test": 14922,
+    "train": 86293,
+    "validation": 21784
+  },
+  "missing_id_count": 0,
+  "ok": true,
+  "raw_csv_sha256": "23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c",
+  "reconstructed_split_rows": {
+    "test": 14922,
+    "train": 86293,
+    "validation": 21784
+  },
+  "split_version": "split-v1"
+}
