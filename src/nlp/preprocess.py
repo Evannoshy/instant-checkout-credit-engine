@@ -123,11 +123,12 @@ def sha256_file(path: str | Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 def audit_source_files(data_dir: str | Path) -> dict[str, Any]:
-    """Record source identity without equating structural checks with identity.
+    """Verify the extracted CSV against the team-approved SHA-256 benchmark.
 
-    An archive mismatch is returned explicitly for the notebook to report.
-    Even if split alignment passes, such analysis remains provisional until
-    the data owner reconciles the frozen archive or confirms its CSV hash.
+    ZIP hashes are informational only: packaging can differ independently of
+    the extracted bytes, and the archive may be deleted after extraction.
+    Missing or mismatched CSV benchmarks fail closed before notebook EDA.
+    Structural split checks remain separate from file identity verification.
     """
     data_dir = Path(data_dir)
     with (data_dir / "split_statistics.json").open(encoding="utf-8") as stream:
@@ -135,6 +136,12 @@ def audit_source_files(data_dir: str | Path) -> dict[str, Any]:
     archive = data_dir / "raw" / "lending-club-loan-data-csv.zip"
     actual = sha256_file(archive) if archive.is_file() else None
     expected = stats.get("archive_sha256")
+    expected_csv = stats.get("raw_csv_sha256")
+    if not isinstance(expected_csv, str) or re.fullmatch(r"[0-9a-f]{64}", expected_csv) is None:
+        raise ValueError("Missing or invalid raw_csv_sha256 benchmark in split_statistics.json")
+    actual_csv = sha256_file(data_dir / "raw" / "loan.csv")
+    if actual_csv != expected_csv:
+        raise ValueError("Raw CSV SHA-256 does not match the approved benchmark; stop source analysis")
     return {
         "dataset_version": stats.get("dataset_version"),
         "split_version": stats.get("split_version"),
@@ -142,7 +149,9 @@ def audit_source_files(data_dir: str | Path) -> dict[str, Any]:
         "expected_archive_sha256": expected,
         "actual_archive_sha256": actual,
         "archive_matches": bool(expected and actual and actual == expected),
-        "raw_csv_sha256": sha256_file(data_dir / "raw" / "loan.csv"),
+        "expected_raw_csv_sha256": expected_csv,
+        "raw_csv_sha256": actual_csv,
+        "raw_csv_matches": True,
         "manifest_sha256": sha256_file(data_dir / "split_manifest.csv"),
     }
 
