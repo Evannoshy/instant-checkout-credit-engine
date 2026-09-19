@@ -30,6 +30,11 @@ This log records decisions that affect the tabular track or its contracts with t
 | D-008 | Keep logistic regression eligible to be the final champion | Proposed | Tabular lead | G0 - 11 Sep | None; model selection evidence decides champion |
 | D-009 | Treat SHAP as a diagnostic, not compliance evidence | Proposed | Project co-leads | G0 - 11 Sep | Qualified review approves narrower jurisdiction-specific usage |
 | D-010 | Define sub-100 ms as a measured percentile SLO | Proposed | Fusion/API lead | Cross-track review - 10 Sep | Target hardware/product requirement changes |
+| D-011 | Use the locked Kaggle LendingClub archive as the v1 evidence source | Accepted with conditions | Project co-leads | 10 Sep 2026 | Rights, checksum or source changes |
+| D-012 | Lock the real-text cohort and chronological `split-v1` manifest | Accepted | Tabular + NLP leads | 10 Sep 2026 | Material cohort defect is demonstrated |
+| D-013 | Generate 3,000 training-only synthetic descriptions with no synthetic labels | Accepted with conditions | Project co-leads | 10 Sep 2026 | Pilot fails quality, privacy or leakage checks |
+| D-014 | Exchange out-of-fold default probabilities between tracks | Accepted | Tabular + NLP + fusion leads | 10 Sep 2026 | Fusion evaluation justifies a versioned replacement |
+| D-015 | Freeze an executable, exact-match definition of the v1 LendingClub cohort | Accepted | Tabular + NLP leads | 19 Sep 2026 | Material cohort defect or source change is demonstrated |
 
 ## 4. Detailed decision records
 
@@ -207,6 +212,108 @@ A simpler model may offer better calibration, explanation stability, operational
 - Inclusion of validation, feature generation, explanation, fusion, policy and serialization.
 - Cold-start reporting.
 
+## D-011 - LendingClub evidence source
+
+**Status:** Accepted with conditions
+**Owner:** Project co-leads
+**Decision date:** 10 September 2026
+
+Use the Kaggle `adarshsng/lending-club-loan-data-csv` archive whose SHA-256 is
+`c6255f6a8099b25303360976597fd8f86ae9087176598692a5a37dd8dc3339a1`.
+The source is a historical US accepted-loan proxy and is not representative of
+Singapore BNPL applicants. The raw file is not redistributed through Git.
+
+The evidence target is ultimate `Charged Off`/`Default` versus `Fully Paid`; it is
+not the intended 30+ DPD/90-day product outcome.
+
+## D-012 - Real-text cohort and split v1
+
+**Status:** Accepted
+**Owner:** Tabular and NLP Track Leads
+**Decision date:** 10 September 2026
+
+Use rows whose raw `loan_status` is exactly `Fully Paid` or `Charged Off`, whose
+raw `desc` field contains at least one non-whitespace character, and whose parsed
+issue month is June 2007 through March 2014 inclusive. Read raw strings with
+`keep_default_na=False`; this is required to preserve the original cohort rule.
+Create stable IDs from locked one-based CSV data-row numbers because original IDs
+are blank. Split by issue month: train through July 2013, validation
+August-December 2013, and test January-March 2014.
+
+The resulting 122,999 loans and derived ID lists are canonical. Neither track may
+regenerate them independently or alter them after reviewing test performance.
+The exact contract and read-only reproduction procedure are frozen by D-015.
+
+## D-013 - Synthetic-description experiment
+
+**Status:** Accepted with conditions
+**Owner:** Project co-leads
+**Decision date:** 10 September 2026
+
+Generate 3,000 descriptions using `gpt-5.6-sol` at `xhigh` reasoning from coarse,
+application-time fields for deterministically selected training loans. Do not send
+the target, outcome, original description, employer, location, protected attributes
+or post-origination variables. Do not generate labels.
+
+Run and review 50 rows before scaling. Synthetic text stays in training, remains
+grouped with its source loan in cross-validation, never duplicates tabular training
+rows and is evaluated as an ablation against real-only training.
+
+## D-014 - Cross-track output contract
+
+**Status:** Accepted
+**Owner:** Tabular, NLP and fusion leads
+**Decision date:** 10 September 2026
+
+The tabular and NLP tracks export versioned probabilities keyed by locked `loan_id`.
+Training predictions consumed by fusion are out-of-fold. Fusion v1 begins with
+logistic stacking over base-model probabilities and is evaluated on identical real
+validation/test IDs.
+
+## D-015 - Executable v1 cohort definition
+
+**Status:** Accepted
+**Owner:** Tabular and NLP Track Leads
+**Decision date:** 19 September 2026
+
+### Context
+
+D-012 recorded the cohort at a high level, but the repository did not contain the
+exact source parsing rule or executable generator. The source also existed in two
+ZIP packages with different archive hashes.
+
+### Decision
+
+Freeze `configs/cohort_v1.toml` and `docs/cohort-definition.md` as the machine- and
+human-readable definitions. Use `scripts/reproduce_locked_cohort.py` as a read-only
+audit against `data/split_manifest.csv`; it must never rewrite the split files.
+
+The raw CSV SHA-256
+`23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c`
+is the content-level source identity. Both observed archives contain this exact
+`loan.csv`, despite their different ZIP hashes.
+
+### Evidence
+
+The approved implementation scanned 2,260,668 source rows and reproduced all
+122,999 canonical rows: 86,293 train, 21,784 validation and 14,922 test. It found
+zero missing IDs, zero extra IDs and zero mismatches in source row, split, issue
+month, target, text-availability, cohort or dataset-version fields. The evidence is
+stored in `reports/data/cohort_reproduction_v1.json`.
+
+### Consequences
+
+- Any rule change requires a new cohort and split version.
+- Model-development loaders remain limited to train and validation.
+- The audit may mechanically compare locked test membership and labels, but test
+  features, outcomes and performance remain unavailable for model selection.
+- Raw source data remains outside Git.
+
+### Revisit trigger
+
+A material cohort defect, source-file change or approved replacement dataset is
+demonstrated.
+
 ## 5. How to add a decision
 
 Use this structure:
@@ -228,3 +335,4 @@ Revisit trigger:
 ```
 
 Do not delete superseded records. Mark them superseded and link the replacement decision.
+

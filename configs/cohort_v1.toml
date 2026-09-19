@@ -1,0 +1,45 @@
+cohort_version = "real_text_matured_v1"
+dataset_version = "kaggle-adarshsng-local-2026-09-09"
+split_version = "split-v1"
+
+[source]
+dataset = "Lending Club Loan Data CSV"
+raw_csv_sha256 = "23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c"
+expected_raw_rows = 2260668
+canonical_archive_sha256 = "c6255f6a8099b25303360976597fd8f86ae9087176598692a5a37dd8dc3339a1"
+alternate_archive_sha256 = "e5de55438920e393443d6212946cd6a0954664e952cdb3683c5607c8beb192f1"
+
+[eligibility]
+allowed_statuses = ["Fully Paid", "Charged Off"]
+description_column = "desc"
+description_rule = "raw_non_whitespace"
+preserve_default_na_tokens = true
+issue_date_column = "issue_d"
+issue_date_format = "%b-%Y"
+first_issue_month = "2007-06"
+last_issue_month = "2014-03"
+
+[identifier]
+source_row_origin = 1
+format = "lc_{source_row_number:09d}"
+
+[target]
+fully_paid = 0
+charged_off = 1
+
+[splits]
+train_first_month = "2007-06"
+train_last_month = "2013-07"
+validation_first_month = "2013-08"
+validation_last_month = "2013-12"
+test_first_month = "2014-01"
+test_last_month = "2014-03"
+
+[expected]
+eligible_rows = 122999
+known_literal_missing_marker_descriptions = 4
+
+[expected.split_rows]
+train = 86293
+validation = 21784
+test = 14922
