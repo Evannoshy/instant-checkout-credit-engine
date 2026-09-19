@@ -11,7 +11,7 @@ import json
 import pandas as pd
 import pytest
 
-from src.nlp.preprocess import build_text_payload, clean_text, load_original_split
+from src.nlp.preprocess import audit_source_files, build_text_payload, clean_text, load_original_split, sha256_file
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +19,33 @@ def describe_test(request: pytest.FixtureRequest):
     """Announce the check; pytest reports success only after it actually passes."""
     description = request.function.__doc__ or request.node.name
     print(f"\n[CHECK] {description.strip()}")
+
+
+@pytest.mark.parametrize("archive_present", [False, True])
+def test_source_audit_accepts_csv_with_missing_or_different_zip(artificial_data_dir, archive_present):
+    """The approved CSV passes regardless of missing or differently packaged ZIP."""
+    path = artificial_data_dir / "split_statistics.json"
+    stats = json.loads(path.read_text())
+    stats["raw_csv_sha256"] = sha256_file(artificial_data_dir / "raw" / "loan.csv")
+    path.write_text(json.dumps(stats))
+    if archive_present:
+        (artificial_data_dir / "raw" / "lending-club-loan-data-csv.zip").write_bytes(b"Artificial archive stand-in")
+    result = audit_source_files(artificial_data_dir)
+    assert result["raw_csv_matches"] is True
+    assert result["archive_matches"] is False
+    assert result["raw_csv_sha256"] == stats["raw_csv_sha256"]
+
+
+@pytest.mark.parametrize("benchmark", [None, "invalid", "0" * 64])
+def test_source_audit_rejects_missing_invalid_or_mismatched_csv_hash(artificial_data_dir, benchmark):
+    """Unapproved CSV identity stops analysis even when split structure is valid."""
+    path = artificial_data_dir / "split_statistics.json"
+    stats = json.loads(path.read_text())
+    if benchmark is not None:
+        stats["raw_csv_sha256"] = benchmark
+    path.write_text(json.dumps(stats))
+    with pytest.raises(ValueError, match="benchmark"):
+        audit_source_files(artificial_data_dir)
 
 
 @pytest.mark.parametrize(
