@@ -1,0 +1,45 @@
+feature_set_version = "tabular_features_v1"
+cohort_version = "real_text_matured_v1"
+split_version = "split-v1"
+identifier_column = "loan_id"
+target_column = "target"
+
+[source]
+features = ["loan_amnt", "term", "annual_inc", "dti", "revol_util",
+            "delinq_2yrs", "inq_last_6mths", "earliest_cr_line", "home_ownership"]
+reference_columns = ["issue_d"]     # used to derive tenure; never a model feature
+
+[derived]   
+annual_inc_log = { from = ["annual_inc"], transform = "log1p" }
+credit_history_months = { from = ["earliest_cr_line", "issue_d"], transform = "months_between" }
+
+[model]
+numeric = ["loan_amnt", "annual_inc_log", "dti", "revol_util",
+           "delinq_2yrs", "inq_last_6mths", "credit_history_months"]
+categorical = ["term", "home_ownership"]
+
+[categories]
+term = ["36", "60"]
+home_ownership = ["MORTGAGE", "OWN", "RENT", "OTHER"]
+home_ownership_to_other = ["NONE", "OTHER", "ANY"] # mapped to "OTHER" in preprocessing
+
+[prohibited]
+underwriting = ["grade", "sub_grade", "int_rate", "installment", "verification_status"]
+geography = ["zip_code", "addr_state"]
+text = ["desc", "title", "emp_title", "synthetic_desc"]
+outcome = [
+    "loan_status",
+    "out_prncp", "out_prncp_inv",
+    "total_pymnt", "total_pymnt_inv", "total_rec_prncp", "total_rec_int", "total_rec_late_fee",
+    "recoveries", "collection_recovery_fee",
+    "last_pymnt_d", "last_pymnt_amnt", "next_pymnt_d", "last_credit_pull_d",
+    "pymnt_plan",
+    # hardship-plan fields
+    "hardship_flag", "hardship_type", "hardship_reason", "hardship_status", "hardship_amount",
+    "hardship_start_date", "hardship_end_date", "hardship_length", "hardship_dpd",
+    "hardship_loan_status", "hardship_payoff_balance_amount", "hardship_last_payment_amount",
+    "deferral_term", "payment_plan_start_date", "orig_projected_additional_accrued_interest",
+    # debt-settlement fields
+    "debt_settlement_flag", "debt_settlement_flag_date", "settlement_status", "settlement_date",
+    "settlement_amount", "settlement_percentage", "settlement_term"
+]
