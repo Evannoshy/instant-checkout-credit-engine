@@ -57,3 +57,6 @@ temp/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Miscellaneous
+CLAUDE.md
