@@ -35,6 +35,7 @@ This log records decisions that affect the tabular track or its contracts with t
 | D-013 | Generate 3,000 training-only synthetic descriptions with no synthetic labels | Accepted with conditions | Project co-leads | 10 Sep 2026 | Pilot fails quality, privacy or leakage checks |
 | D-014 | Exchange out-of-fold default probabilities between tracks | Accepted | Tabular + NLP + fusion leads | 10 Sep 2026 | Fusion evaluation justifies a versioned replacement |
 | D-015 | Freeze an executable, exact-match definition of the v1 LendingClub cohort | Accepted | Tabular + NLP leads | 19 Sep 2026 | Material cohort defect or source change is demonstrated |
+| D-016 | Approve the nine-feature `tabular_features_v1` baseline contract | Accepted | Tabular lead | 23 Sep 2026 | A documented defect or approved v2 proposal is demonstrated |
 
 ## 4. Detailed decision records
 
@@ -313,6 +314,44 @@ stored in `reports/data/cohort_reproduction_v1.json`.
 
 A material cohort defect, source-file change or approved replacement dataset is
 demonstrated.
+
+## D-016 - Tabular feature set v1
+
+**Status:** Accepted
+**Owner:** Tabular Track Tech Lead
+**Decision date:** 23 September 2026
+
+### Decision
+
+Approve `configs/tabular_features_v1.toml` as the feature contract for the first
+logistic-regression baseline. The model receives seven numeric features and two
+categorical features derived from nine application-time LendingClub columns.
+
+The approved model features are `loan_amnt`, `annual_inc_log`, `dti`,
+`revol_util`, `delinq_2yrs`, `inq_last_6mths`, `credit_history_months`, `term`
+and `home_ownership`.
+
+### Conditions
+
+- The twelve Discuss features and the unreviewed bureau columns remain excluded.
+- Post-origination, outcome, identifier, text and synthetic-text fields remain
+  excluded.
+- `load_tabular_split` may return only train or validation rows and must reject
+  the locked test split.
+- Missing-value imputation, scaling and one-hot encoding are fitted by the model
+  pipeline using training rows only.
+- Any change requires a new feature-set version rather than an in-place edit.
+
+### Evidence
+
+The preprocessing suite covers the feature order, transformations, missing-value
+handling, prohibited columns, split isolation and deterministic output. The
+real-data check returns 86,293 training rows and 21,784 validation rows.
+
+### Revisit trigger
+
+A documented preprocessing defect, new data source or approved
+`tabular_features_v2` proposal is demonstrated.
 
 ## 5. How to add a decision
 
