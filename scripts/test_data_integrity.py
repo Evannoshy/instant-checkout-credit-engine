@@ -6,8 +6,8 @@ From the repository root, show each check and its actual pytest result with:
 The -s flag shows print statements; -v shows each PASSED/FAILED result.
 
 The raw source defaults to data/raw/loan.csv. Set ``LENDINGCLUB_RAW_CSV`` to use
-a different file. If the resolved file does not exist, the whole pytest run is
-aborted at collection time rather than skipping or failing individual tests.
+a different file. Tests that require the restricted raw file are skipped when
+it is unavailable; manifest and split-file checks still run.
 """
 
 import os
@@ -20,13 +20,6 @@ import pytest
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 RAW_DIR = DATA_DIR / "raw"
 RAW_CSV = Path(os.environ.get("LENDINGCLUB_RAW_CSV", RAW_DIR / "loan.csv"))
-
-if not RAW_CSV.is_file():
-    pytest.exit(
-        f"Raw LendingClub CSV not found at {RAW_CSV}. Place it at data/raw/loan.csv "
-        "or set LENDINGCLUB_RAW_CSV to its path.",
-        returncode=2,
-    )
 
 EXPECTED_COUNTS = {"train": 86293, "val": 21784, "test": 14922}
 ID_FILES = {
@@ -55,18 +48,31 @@ def manifest():
 
 
 @pytest.fixture(scope="module")
-def raw_row_count():
-    with open(RAW_CSV, encoding="utf-8") as fh:
+def raw_csv_path():
+    """Return the local restricted source or skip only tests that require it."""
+    if not RAW_CSV.is_file():
+        pytest.skip(
+            f"Raw LendingClub CSV not found at {RAW_CSV}; set LENDINGCLUB_RAW_CSV "
+            "to run raw-source integrity checks."
+        )
+    return RAW_CSV
+
+
+@pytest.fixture(scope="module")
+def raw_row_count(raw_csv_path):
+    with open(raw_csv_path, encoding="utf-8") as fh:
         return sum(1 for _ in fh) - 1  # exclude header
 
 
 @pytest.fixture(scope="module")
-def raw_fields_for_manifest_rows(manifest):
+def raw_fields_for_manifest_rows(manifest, raw_csv_path):
     """issue_d and loan_status from loan.csv, aligned to each manifest row's source_row_number."""
     wanted = np.fromiter(manifest["source_row_number"], dtype=np.int64)
     row_number = 0
     frames = []
-    for chunk in pd.read_csv(RAW_CSV, usecols=["issue_d", "loan_status"], chunksize=200_000):
+    for chunk in pd.read_csv(
+        raw_csv_path, usecols=["issue_d", "loan_status"], chunksize=200_000
+    ):
         row_numbers = np.arange(row_number + 1, row_number + 1 + len(chunk))
         mask = np.isin(row_numbers, wanted)
         if mask.any():
@@ -115,7 +121,7 @@ def test_split_manifest_row_counts_match_ids_files(manifest):
     manifest_counts = manifest["split"].value_counts()
     for name, expected in EXPECTED_COUNTS.items():
         manifest_split = MANIFEST_SPLIT_NAME[name]
-        actual = int(manifest_counts.get(manifest_split, 0))
+        actual = int(manifest_counts(get(manifest_split, 0))
         assert actual == expected, f"split_manifest rows with split=='{manifest_split}' == {expected} (got {actual})"
 
 
