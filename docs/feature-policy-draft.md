@@ -1,11 +1,11 @@
-# Tabular Feature Policy — Draft
+# Tabular Feature Policy
 
-**Document status:** Draft for Tabular Track Tech Lead review — proposes `tabular_features_v1`  
-**Version:** 0.2  
-**Date:** 22 September 2026  
-**Accountable owner:** Evan (Tabular Track Tech Lead)  
-**Primary author:** Brandon (Tabular Analyst 1)  
-**Reviewers:** Tabular Track Tech Lead; NLP Track Lead (text-field scope); Project co-leads (population and fairness questions)  
+**Document status:** Approved for logistic baseline v1
+**Version:** 0.2
+**Date:** 22 September 2026
+**Accountable owner:** Evan (Tabular Track Tech Lead)
+**Primary author:** Brandon (Tabular Analyst 1)
+**Reviewers:** Tabular Track Tech Lead; NLP Track Lead (text-field scope); Project co-leads (population and fairness questions)
 
 ---
 
@@ -20,7 +20,9 @@ missingness of each reviewed column, and the proposed feature set `tabular_featu
 logistic baseline (§7). It does not decide the champion model, the serving schema, or fairness
 policy.
 
-All classifications below are proposals until reviewed.
+The classifications and `tabular_features_v1` feature set below are approved for
+the Week 2 logistic-regression baseline. Any later change requires a new
+feature-set version and a recorded review decision.
 
 ### 1.1 Changes in v0.2
 
@@ -87,11 +89,11 @@ Three names in the reviewed list did not match the dataset schema and are correc
 
 Each column was assigned one of three buckets.
 
-- **Proposed** — available at origination, has a stated financial concept, has a definable
+- **Proposed** - available at origination, has a stated financial concept, has a definable
   missing-value rule, and is adequately populated in the training split.
-- **Discuss** — available at origination, but carries a judgment question: high missingness,
+- **Discuss** - available at origination, but carries a judgment question: high missingness,
   fairness risk, platform artifact, or redundancy. Each entry states a reason for and against.
-- **Prohibited** — unavailable at origination, derived from the target, carries no information, or
+- **Prohibited** - unavailable at origination, derived from the target, carries no information, or
   is out of scope for the tabular track. Each entry names the exclusion type.
 
 Exclusion types used in §6:
@@ -108,16 +110,16 @@ Exclusion types used in §6:
 ## 4. Proposed features
 
 Six of these fifteen are not in `tabular_features_v1` (§7): `emp_length`, `purpose`, `open_acc`,
-`pub_rec`, `revol_bal` and `total_acc`. They remain Proposed — usable in a later feature-set
-version — not prohibited.
+`pub_rec`, `revol_bal` and `total_acc`. They remain Proposed - usable in a later feature-set
+version - not prohibited.
 
 | Column | Description (LC dictionary) | Reason for decision | Data type | Miss % train |
 |---|---|---|---|---|
 | `loan_amnt` | The listed amount of the loan applied for by the borrower | Core exposure size, fixed at application. | `int64` | 0.00 |
 | `term` | Number of payments on the loan, in months | Product term, known at application. Two values only; parse to a category (`36` / `60`). | `string` | 0.00 |
-| `emp_length` | Employment length in years, 0 to 10, where 10 is ten or more | Employment stability proxy. Ordinal once parsed; top value censored at `10+ years`. Missing in 3.49% of training rows — low enough for a treat-as-own-category rule. | `string` | 3.49 |
+| `emp_length` | Employment length in years, 0 to 10, where 10 is ten or more | Employment stability proxy. Ordinal once parsed; top value censored at `10+ years`. Missing in 3.49% of training rows - low enough for a treat-as-own-category rule. | `string` | 3.49 |
 | `home_ownership` | Home ownership status provided by the borrower or obtained from the credit report | Housing-cost and asset proxy. Five values in training, not the dictionary's four: `MORTGAGE`, `RENT`, `OWN`, plus `OTHER` (124 rows) and `NONE` (29 rows). Collapse the two rare levels to `OTHER` before encoding. | `string` | 0.00 |
-| `annual_inc` | Self-reported annual income provided by the borrower during registration | Primary affordability input. Severely right-skewed in training (4,000 to 7,141,778); needs a log transform or winsorisation. Self-reported — see `verification_status` in §5. | `float64` | 0.00 |
+| `annual_inc` | Self-reported annual income provided by the borrower during registration | Primary affordability input. Severely right-skewed in training (4,000 to 7,141,778); needs a log transform or winsorisation. Self-reported - see `verification_status` in §5. | `float64` | 0.00 |
 | `purpose` | A category provided by the borrower for the loan request | Borrower-stated use of funds, fixed at application. 14 levels in training, low enough to one-hot. Levels can appear or disappear over time, so the encoder needs an unseen-category rule. | `string` | 0.00 |
 | `dti` | Ratio of the borrower's monthly debt payments, excluding mortgage and the requested LC loan, to self-reported monthly income | Core indebtedness ratio. Two limits: the definition excludes both the mortgage and the requested loan, and observed training values stop at 34.99, which is an LC underwriting cut-off rather than the true distribution. | `float64` | 0.00 |
 | `delinq_2yrs` | Number of 30+ days past-due delinquencies in the credit file in the past 2 years | Prior delinquency count from the bureau file. Bounded lookback, so it does not carry indefinite history. | `float64` | 0.00 |
@@ -139,12 +141,12 @@ model (`tabular_features_v1`).** Including any of them requires a Tech Lead deci
 | Column | Description (LC dictionary) | Reason for | Reason against | Data type | Miss % train |
 |---|---|---|---|---|---|
 | `verification_status` | Indicates if income was verified by LC, not verified, or if the income source was verified | A data-quality flag on `annual_inc`, not a risk conclusion. Fully populated, three levels. | The three levels are defined by LC's own verification process and have no equivalent in an SG checkout product, so a coefficient learned here will not transfer to serving. | `string` | 0.00 |
-| `int_rate` | Interest rate on the loan | Priced before funding, so it passes the timing rule. Numeric percentage points, no parsing needed, fully populated. | LC's own pricing output, not borrower behaviour. If it dominates the lift, the model is mostly decoding LC's scorecard. It also has no serving-time equivalent — in the target system the price is set after the risk decision, so the feature could not be computed at inference. | `float64` | 0.00 |
+| `int_rate` | Interest rate on the loan | Priced before funding, so it passes the timing rule. Numeric percentage points, no parsing needed, fully populated. | LC's own pricing output, not borrower behaviour. If it dominates the lift, the model is mostly decoding LC's scorecard. It also has no serving-time equivalent - in the target system the price is set after the risk decision, so the feature could not be computed at inference. | `float64` | 0.00 |
 | `grade` | LC assigned loan grade | Compact and informative. | An underwriting-model output with no meaning outside LC's own assessment. Fully determined by `sub_grade` (its first character). | `string` | 0.00 |
 | `sub_grade` | LC assigned loan subgrade | Finer-grained than `grade`. | Same as above. | `string` | 0.00 |
 | `installment` | The monthly payment owed by the borrower if the loan originates | Direct affordability quantity; combines with `annual_inc` into a payment-to-income ratio. | Arithmetically derived: the standard annuity formula on `funded_amnt`, `term` and `int_rate` reproduces it to within $1 for 99.96% of training rows. It adds no information beyond `loan_amnt`, `term` and `int_rate`. | `float64` | 0.00 |
 | `zip_code` | First 3 numbers of the zip code provided by the borrower | Geography carries genuine risk signal and supports subgroup analysis. | Established proxy-discrimination risk, and 846 levels in training is too high-cardinality to one-hot safely. | `string` | 0.00 |
-| `addr_state` | The state provided by the borrower | Coarser than `zip_code`; supports geographic robustness checks. | Same proxy concern at lower resolution. Same recommendation. | `string` | 0.00 |
+| `addr_state` | The state provided by the borrower | Coarser than `zip_code`; supports geographic sensitivity checks. | Same proxy concern at lower resolution. Same recommendation. | `string` | 0.00 |
 | `initial_list_status` | The initial listing status of the loan: W or F | Trivially encodable, fully populated. | A platform mechanic (whole vs fractional funding) with no borrower-risk meaning; `w` is 8.3% of training rows. Any predictive power would reflect LC's listing policy, which can change over time, rather than borrower risk. | `string` | 0.00 |
 | `funded_amnt` | The total amount committed to that loan at that point in time | Captures partial-funding cases; it differs from `loan_amnt` in 1.7% of training rows. | "At that point in time" means the value accumulates during the listing period, after the application. `loan_amnt` covers the same concept without the timing ambiguity. | `int64` | 0.00 |
 | `funded_amnt_inv` | The total amount committed by investors at that point in time | Same as above. | Same objection, more strongly: it equals `loan_amnt` in only 68.7% of training rows, so it largely records investor demand during listing. | `float64` | 0.00 |
@@ -160,35 +162,35 @@ at origination.
 
 | Column | Description (LC dictionary) | Exclusion type |
 |---|---|---|
-| `loan_status` | Current status of the loan | `TARGET_DERIVED` — source field for the label |
+| `loan_status` | Current status of the loan | `TARGET_DERIVED` - source field for the label |
 | `out_prncp` | Remaining outstanding principal for total amount funded | `POST_OUTCOME` |
 | `out_prncp_inv` | Remaining outstanding principal for the investor-funded portion | `POST_OUTCOME` |
 | `total_pymnt` | Payments received to date for total amount funded | `POST_OUTCOME` |
 | `total_pymnt_inv` | Payments received to date for the investor-funded portion | `POST_OUTCOME` |
 | `total_rec_prncp` | Principal received to date | `POST_OUTCOME` |
 | `total_rec_int` | Interest received to date | `POST_OUTCOME` |
-| `total_rec_late_fee` | Late fees received to date | `POST_OUTCOME` — late fees imply delinquency |
-| `recoveries` | Post charge-off gross recovery | `POST_OUTCOME` — non-zero only after charge-off |
+| `total_rec_late_fee` | Late fees received to date | `POST_OUTCOME` - late fees imply delinquency |
+| `recoveries` | Post charge-off gross recovery | `POST_OUTCOME` - non-zero only after charge-off |
 | `collection_recovery_fee` | Post charge-off collection fee | `POST_OUTCOME` |
 | `last_pymnt_d` | Last month payment was received | `POST_OUTCOME` |
 | `last_pymnt_amnt` | Last total payment amount received | `POST_OUTCOME` |
-| `next_pymnt_d` | Next scheduled payment date | `POST_OUTCOME` — exists only for a live loan |
-| `last_credit_pull_d` | The most recent month LC pulled credit for this loan | `REFRESHED_SOURCE` — updated through the life of the loan |
-| `pymnt_plan` | Indicates if a payment plan has been put in place | `POST_OUTCOME` — a payment plan follows repayment difficulty |
+| `next_pymnt_d` | Next scheduled payment date | `POST_OUTCOME` - exists only for a live loan |
+| `last_credit_pull_d` | The most recent month LC pulled credit for this loan | `REFRESHED_SOURCE` - updated through the life of the loan |
+| `pymnt_plan` | Indicates if a payment plan has been put in place | `POST_OUTCOME` - a payment plan follows repayment difficulty |
 | `hardship_flag`, `hardship_type`, `hardship_reason`, `hardship_status`, `hardship_amount`, `hardship_start_date`, `hardship_end_date`, `hardship_length`, `hardship_dpd`, `hardship_loan_status`, `hardship_payoff_balance_amount`, `hardship_last_payment_amount`, `deferral_term`, `payment_plan_start_date`, `orig_projected_additional_accrued_interest` | Hardship-plan fields, populated only where the borrower entered a hardship arrangement | `POST_OUTCOME` |
-| `debt_settlement_flag`, `debt_settlement_flag_date`, `settlement_status`, `settlement_date`, `settlement_amount`, `settlement_percentage`, `settlement_term` | Debt-settlement fields; the dictionary defines the flag as applying to a borrower "who has charged-off" | `POST_OUTCOME` — the definition states the loan has already charged off |
+| `debt_settlement_flag`, `debt_settlement_flag_date`, `settlement_status`, `settlement_date`, `settlement_amount`, `settlement_percentage`, `settlement_term` | Debt-settlement fields; the dictionary defines the flag as applying to a borrower "who has charged-off" | `POST_OUTCOME` - the definition states the loan has already charged off |
 
 ### 6.2 Identifiers, constants and link fields
 
 | Column | Description (LC dictionary) | Exclusion type |
 |---|---|---|
-| `id` | A unique LC assigned ID for the loan listing | `IDENTIFIER` — and 100% null in training |
-| `member_id` | A unique LC assigned ID for the borrower member | `IDENTIFIER` — 100% null in training, so it cannot support grouped splitting either |
-| `url` | URL for the LC page with listing data | `IDENTIFIER` — 100% null in training |
-| `loan_id` | Project-assigned identifier; not a LendingClub field | `IDENTIFIER` — join key to the split manifest; unique per row |
+| `id` | A unique LC assigned ID for the loan listing | `IDENTIFIER` - and 100% null in training |
+| `member_id` | A unique LC assigned ID for the borrower member | `IDENTIFIER` - 100% null in training, so it cannot support grouped splitting either |
+| `url` | URL for the LC page with listing data | `IDENTIFIER` - 100% null in training |
+| `loan_id` | Project-assigned identifier; not a LendingClub field | `IDENTIFIER` - join key to the split manifest; unique per row |
 | `issue_d` | The month which the loan was funded | Timestamp, not a feature. Required for splitting and for deriving credit-file tenure. |
-| `policy_code` | publicly available policy_code=1; new products not publicly available policy_code=2 | `NO_VARIANCE` — constant at 1 in training. Excluded for lack of information, not for leakage; the dictionary gives no further detail on what distinguishes the two codes. |
-| `application_type` | Indicates whether the loan is an individual or joint application | `NO_VARIANCE` — constant at `Individual` in training, which also empties `annual_inc_joint`, `dti_joint` and `verification_status_joint`. |
+| `policy_code` | publicly available policy_code=1; new products not publicly available policy_code=2 | `NO_VARIANCE` - constant at 1 in training. Excluded for lack of information, not for leakage; the dictionary gives no further detail on what distinguishes the two codes. |
+| `application_type` | Indicates whether the loan is an individual or joint application | `NO_VARIANCE` - constant at `Individual` in training, which also empties `annual_inc_joint`, `dti_joint` and `verification_status_joint`. |
 
 ### 6.3 Out-of-scope text fields
 
@@ -197,17 +199,17 @@ no leakage. They are unusable here because they are high-cardinality free text.
 
 | Column | Description (LC dictionary) | Exclusion type |
 |---|---|---|
-| `emp_title` | The job title supplied by the borrower when applying | `OUT_OF_SCOPE_TEXT` — 59,658 unstandardised values in training |
-| `title` | The loan title provided by the borrower | `OUT_OF_SCOPE_TEXT` — 31,629 borrower-typed values in training, largely redundant with `purpose` |
-| `desc` | Loan description provided by the borrower | `OUT_OF_SCOPE_TEXT` — free-text narrative; the natural input for the text track |
+| `emp_title` | The job title supplied by the borrower when applying | `OUT_OF_SCOPE_TEXT` - 59,658 unstandardised values in training |
+| `title` | The loan title provided by the borrower | `OUT_OF_SCOPE_TEXT` - 31,629 borrower-typed values in training, largely redundant with `purpose` |
+| `desc` | Loan description provided by the borrower | `OUT_OF_SCOPE_TEXT` - free-text narrative; the natural input for the text track |
 
 The synthetic descriptions in `data/synthetic_descriptions_v2.csv` are also excluded from the
 tabular track. They are systems-lane data (D-013) and must not back any real-world performance
 claim.
 
-## 7. Proposed feature set: `tabular_features_v1`
+## 7. Approved feature set: `tabular_features_v1`
 
-The nine features below are the proposed `tabular_features_v1` for the Week 2 logistic
+The nine features below are the approved `tabular_features_v1` for the Week 2 logistic
 regression baseline. The set is defined executably in `configs/tabular_features_v1.toml` and
 loaded by `src/tabular/preprocess.py` (`load_tabular_split`), which rejects any configuration
 that uses a prohibited column.
@@ -256,21 +258,21 @@ Excluded from `tabular_features_v1`:
 
 | Requirement | Status | Evidence |
 |---|---|---|
-| ~20–30 potential baseline features reviewed | Met | 27 candidate columns carried through to a Proposed/Discuss decision (§4: 15, §5: 12) |
-| Table of ~20–30 potential baseline features | Met | §4 + §5 tables, 27 rows combined |
+| ~20-30 potential baseline features reviewed | Met | 27 candidate columns carried through to a Proposed/Discuss decision (§4: 15, §5: 12) |
+| Table of ~20-30 potential baseline features | Met | §4 + §5 tables, 27 rows combined |
 | Data type and missingness recorded per reviewed feature | Met | Measured on the training split only; populated in §4 and §5 for every row (§2.1) |
 | Obvious post-loan and outcome-related leakage fields identified and prohibited | Met | §6.1: 37 post-origination/outcome columns across 17 entries, each tagged `POST_OUTCOME`, `REFRESHED_SOURCE` or `TARGET_DERIVED` |
-| Every reviewed feature has a preliminary decision and explanation | Met | Every row in §4–§6 carries a decision bucket and a stated reason |
-| Nine-feature list stated as the proposed `tabular_features_v1` | Met | §7; `configs/tabular_features_v1.toml` |
+| Every reviewed feature has a preliminary decision and explanation | Met | Every row in §4-§6 carries a decision bucket and a stated reason |
+| Nine-feature list approved as `tabular_features_v1` | Met | §7; `configs/tabular_features_v1.toml`; D-016 |
 | Feature and preprocessing decisions use training-set statistics only | Met | §2.1, §2.3; validation and test figures removed in v0.2 (§1.1) |
-| Test-set missingness and default rates not used to choose features | Met | §2.3; no test statistic remains in §4–§7 |
+| Test-set missingness and default rates not used to choose features | Met | §2.3; no test statistic remains in §4-§7 |
 | The 12 Discuss features excluded from the Week 2 model | Met | §5, §7 |
 | The ~90 unreviewed bureau columns excluded | Met | §2, §7 |
-| Test data remains locked | Met | §2.3; `load_tabular_split` rejects `split="test"`, covered by `src/tabular/test_preprocess.py` |
+| Test data remains locked | Met | §2.3; `load_tabular_split` rejects `split="test"`, covered by `src/tabular/test_tabular_preprocess.py` |
 | No raw LendingClub data committed to GitHub | Met | `data/raw/` is gitignored; only `split_manifest.csv`, `*_ids.csv` and `synthetic_descriptions_v2.csv` are tracked, none of which carry raw LC feature columns |
-| Tech Lead approval of `tabular_features_v1` | Not met | Pending Evan's review. On approval, the document status changes to "Approved for logistic baseline v1" and the decision is recorded in `docs/decisions/decision-log.md` |
+| Tech Lead approval of `tabular_features_v1` | Met | Approved by Evan on 23 September 2026 and recorded in D-016 |
 
-Not yet closed — carried forward as decisions for the Tabular Track Tech Lead, not blockers to
+Not yet closed - carried forward as decisions for the Tabular Track Tech Lead, not blockers to
 `tabular_features_v1`:
 
 - Whether `int_rate` (and by extension `grade`, `sub_grade`, `installment`) enters a later
