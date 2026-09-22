@@ -81,6 +81,63 @@ REQUIRED_FEATURE_CONFIG_KEYS = {
     "target_column", "source", "derived", "model", "categories", "prohibited",
 }
 
+# Every ValueError message raised by this module, as str.format templates.
+# Placeholders are filled at the raise site; messages with none are used as-is.
+# The test-split message is owned by src/tabular/evaluate.py and only referenced.
+ERROR_MESSAGES: dict[str, str] = {
+    # Feature config (load_feature_config, _resolve_transformation)
+    "config_missing_keys": "Feature config is missing keys: {missing}",
+    "config_wrong_cohort": "Feature config targets {actual!r}, not {expected!r}",
+    "derived_undeclared_columns": "Derived feature {feature} uses undeclared columns: {columns}",
+    "duplicate_model_features": "Model feature names must be unique",
+    "prohibited_columns": "Prohibited columns used by feature configuration: {columns}",
+    "identifier_or_target_as_feature": "Identifier/target configured as features: {columns}",
+    "unsourced_features": "Model features with no source column or derivation: {columns}",
+    "missing_categorical_rule": "No normalisation rule or category list for {column!r}",
+    "derived_not_table": "Derived feature {feature} must be a table with 'transform' and 'from'",
+    "unsupported_transform": (
+        "Unsupported transform for {feature}: {transform!r}; supported: {supported}"
+    ),
+    "derived_wrong_from": (
+        "Derived feature {feature} ({transform}) needs 'from' to list exactly "
+        "{count} column name(s); got {sources!r}"
+    ),
+    # Raw values (feature transformations and categorical normalisers)
+    "non_numeric_values": "Non-numeric values in {column}: {examples}",
+    "negative_values": "Negative values in {column}: {examples}",
+    "unparseable_dates": "Unparseable dates in {column}: {examples}",
+    "unrecognised_term": "Unrecognised term values: {examples}",
+    "unrecognised_home_ownership": "Unrecognised home_ownership values: {examples}",
+    "unsupported_categorical": "Unsupported categorical column: {column!r}; supported: {supported}",
+    # Load parameters
+    "test_split_locked": TEST_SPLIT_LOCKED_MESSAGE,
+    "unknown_split": "Unknown split: {split!r}",
+    "non_positive_chunksize": "chunksize must be positive",
+    # Manifest and locked ID files
+    "split_version_mismatch": "Feature config split version disagrees with split statistics",
+    "missing_raw_rows": "split_statistics.json has no raw_rows count",
+    "empty_split": "No rows found for {split}",
+    "id_file_no_loan_id": "{filename} has no loan_id column",
+    "id_file_missing_or_duplicate": "{filename} contains missing or duplicate loan_id values",
+    "id_file_disagrees": (
+        "{filename} disagrees with the manifest {split} split: "
+        "{only_in_file} IDs only in the file, "
+        "{only_in_manifest} only in the manifest"
+    ),
+    # Raw CSV read and join
+    "raw_missing_columns": "Raw CSV is missing configured columns: {columns}",
+    "raw_record_count": "Raw CSV record count disagrees with split statistics",
+    "no_source_records": "No requested source records were found",
+    "unmatched_manifest_rows": "{count} manifest rows have no source record, e.g. {sample}",
+    "issue_month_alignment": (
+        "Issue-month alignment failed; check the source version and one-based row numbering"
+    ),
+    "status_target_alignment": "Status/target alignment failed; do not use this source mapping",
+    # Output
+    "output_not_one_to_one": "Output rows do not match the manifest split one-to-one",
+    "output_not_aligned": "Feature and target rows are not aligned on loan_id",
+}
+
 
 def load_feature_config(path: str | Path = DEFAULT_FEATURE_CONFIG) -> dict[str, Any]:
     """Load and validate a tabular feature config.
@@ -97,11 +154,11 @@ def load_feature_config(path: str | Path = DEFAULT_FEATURE_CONFIG) -> dict[str, 
         config = tomllib.load(stream)
 
     if missing := REQUIRED_FEATURE_CONFIG_KEYS - set(config):
-        raise ValueError(f"Feature config is missing keys: {sorted(missing)}")
+        raise ValueError(ERROR_MESSAGES["config_missing_keys"].format(missing=sorted(missing)))
     if config["cohort_version"] != EXPECTED_COHORT:
-        raise ValueError(
-            f"Feature config targets {config['cohort_version']!r}, not {EXPECTED_COHORT!r}"
-        )
+        raise ValueError(ERROR_MESSAGES["config_wrong_cohort"].format(
+            actual=config["cohort_version"], expected=EXPECTED_COHORT,
+        ))
 
     source = list(config["source"]["features"])
     reference = list(config["source"].get("reference_columns", []))
@@ -113,22 +170,24 @@ def load_feature_config(path: str | Path = DEFAULT_FEATURE_CONFIG) -> dict[str, 
     for name, spec in derived.items():
         _, inputs = _resolve_transformation(name, spec)
         if unknown := set(inputs) - set(source) - set(reference):
-            raise ValueError(f"Derived feature {name} uses undeclared columns: {sorted(unknown)}")
+            raise ValueError(ERROR_MESSAGES["derived_undeclared_columns"].format(
+                feature=name, columns=sorted(unknown),
+            ))
         derived_inputs.update(inputs)
 
     if len(features) != len(set(features)):
-        raise ValueError("Model feature names must be unique")
+        raise ValueError(ERROR_MESSAGES["duplicate_model_features"])
     if banned := (set(features) | set(source) | set(reference) | derived_inputs) & prohibited:
-        raise ValueError(f"Prohibited columns used by feature configuration: {sorted(banned)}")
+        raise ValueError(ERROR_MESSAGES["prohibited_columns"].format(columns=sorted(banned)))
     if leaked := {config["identifier_column"], config["target_column"]} & set(features):
-        raise ValueError(f"Identifier/target configured as features: {sorted(leaked)}")
-    if unsourced := set(features) - set(source) - set(derived):
         raise ValueError(
-            f"Model features with no source column or derivation: {sorted(unsourced)}"
+            ERROR_MESSAGES["identifier_or_target_as_feature"].format(columns=sorted(leaked))
         )
+    if unsourced := set(features) - set(source) - set(derived):
+        raise ValueError(ERROR_MESSAGES["unsourced_features"].format(columns=sorted(unsourced)))
     for column in config["model"]["categorical"]:
         if column not in _CATEGORICAL_NORMALISERS or column not in config["categories"]:
-            raise ValueError(f"No normalisation rule or category list for {column!r}")
+            raise ValueError(ERROR_MESSAGES["missing_categorical_rule"].format(column=column))
     return config
 
 
@@ -155,7 +214,9 @@ def _to_float(frame: pd.DataFrame, column: str) -> pd.Series:
     converted = pd.to_numeric(values, errors="coerce")
     invalid = values.notna() & converted.isna()
     if invalid.any():
-        raise ValueError(f"Non-numeric values in {column}: {_examples(frame, invalid, column)}")
+        raise ValueError(ERROR_MESSAGES["non_numeric_values"].format(
+            column=column, examples=_examples(frame, invalid, column),
+        ))
     return converted.astype("float64")
 
 
@@ -170,7 +231,9 @@ def _normalise_term(frame: pd.DataFrame, allowed: list[str]) -> pd.Series:
     parsed = values.str.extract(_TERM_PATTERN, expand=False)
     invalid = values.notna() & ~parsed.isin(allowed)
     if invalid.any():
-        raise ValueError(f"Unrecognised term values: {_examples(frame, invalid, 'term')}")
+        raise ValueError(ERROR_MESSAGES["unrecognised_term"].format(
+            examples=_examples(frame, invalid, "term"),
+        ))
     return _as_object(parsed)
 
 
@@ -182,9 +245,9 @@ def _normalise_home_ownership(
     collapsed = values.mask(values.isin(to_other), "OTHER")
     invalid = values.notna() & ~collapsed.isin(allowed)
     if invalid.any():
-        raise ValueError(
-            f"Unrecognised home_ownership values: {_examples(frame, invalid, 'home_ownership')}"
-        )
+        raise ValueError(ERROR_MESSAGES["unrecognised_home_ownership"].format(
+            examples=_examples(frame, invalid, "home_ownership"),
+        ))
     return _as_object(collapsed)
 
 
@@ -206,10 +269,9 @@ def _normalise_categorical(
     """Normalise one configured categorical column with its registered rule."""
     normaliser = _CATEGORICAL_NORMALISERS.get(column)
     if normaliser is None:
-        raise ValueError(
-            f"Unsupported categorical column: {column!r}; "
-            f"supported: {sorted(_CATEGORICAL_NORMALISERS)}"
-        )
+        raise ValueError(ERROR_MESSAGES["unsupported_categorical"].format(
+            column=column, supported=sorted(_CATEGORICAL_NORMALISERS),
+        ))
     return normaliser(frame, categories)
 
 
@@ -218,7 +280,9 @@ def _log1p(frame: pd.DataFrame, column: str) -> pd.Series:
     values = _to_float(frame, column)
     negative = values < 0
     if negative.any():
-        raise ValueError(f"Negative values in {column}: {_examples(frame, negative, column)}")
+        raise ValueError(ERROR_MESSAGES["negative_values"].format(
+            column=column, examples=_examples(frame, negative, column),
+        ))
     return np.log1p(values)
 
 
@@ -227,7 +291,9 @@ def _months_between(frame: pd.DataFrame, start: str, end: str) -> pd.Series:
     start_dates = pd.to_datetime(frame[start], format=DATE_FORMAT, errors="coerce")
     invalid = frame[start].notna() & start_dates.isna()
     if invalid.any():
-        raise ValueError(f"Unparseable dates in {start}: {_examples(frame, invalid, start)}")
+        raise ValueError(ERROR_MESSAGES["unparseable_dates"].format(
+            column=start, examples=_examples(frame, invalid, start),
+        ))
     end_dates = pd.to_datetime(frame[end], format=DATE_FORMAT)
     months = (
         (end_dates.dt.year - start_dates.dt.year) * 12
@@ -250,13 +316,12 @@ def _resolve_transformation(
 ) -> tuple[Callable[..., pd.Series], list[str]]:
     """Validate one [derived] entry and return its (implementation, source columns)."""
     if not isinstance(spec, dict):
-        raise ValueError(f"Derived feature {feature} must be a table with 'transform' and 'from'")
+        raise ValueError(ERROR_MESSAGES["derived_not_table"].format(feature=feature))
     transform = spec.get("transform")
     if transform not in _TRANSFORMATIONS:
-        raise ValueError(
-            f"Unsupported transform for {feature}: {transform!r}; "
-            f"supported: {sorted(_TRANSFORMATIONS)}"
-        )
+        raise ValueError(ERROR_MESSAGES["unsupported_transform"].format(
+            feature=feature, transform=transform, supported=sorted(_TRANSFORMATIONS),
+        ))
     source_count, implementation = _TRANSFORMATIONS[transform]
     sources = spec.get("from")
     if (
@@ -264,10 +329,9 @@ def _resolve_transformation(
         or not all(isinstance(column, str) and column for column in sources)
         or len(sources) != source_count
     ):
-        raise ValueError(
-            f"Derived feature {feature} ({transform}) needs 'from' to list exactly "
-            f"{source_count} column name(s); got {sources!r}"
-        )
+        raise ValueError(ERROR_MESSAGES["derived_wrong_from"].format(
+            feature=feature, transform=transform, count=source_count, sources=sources,
+        ))
     return implementation, sources
 
 
@@ -283,28 +347,29 @@ def _apply_transformation(
 
 def _validate_split_ids(data_dir: Path, split: str, manifest_ids: set[str]) -> None:
     """Require the split's locked ID file to be duplicate-free and equal to the manifest split."""
-    ids = pd.read_csv(data_dir / ID_FILES[split], dtype={"loan_id": "string"})
+    filename = ID_FILES[split]
+    ids = pd.read_csv(data_dir / filename, dtype={"loan_id": "string"})
     if "loan_id" not in ids.columns:
-        raise ValueError(f"{ID_FILES[split]} has no loan_id column")
+        raise ValueError(ERROR_MESSAGES["id_file_no_loan_id"].format(filename=filename))
     if ids["loan_id"].isna().any() or ids["loan_id"].duplicated().any():
-        raise ValueError(f"{ID_FILES[split]} contains missing or duplicate loan_id values")
+        raise ValueError(ERROR_MESSAGES["id_file_missing_or_duplicate"].format(filename=filename))
     file_ids = set(ids["loan_id"])
     if file_ids != manifest_ids:
-        raise ValueError(
-            f"{ID_FILES[split]} disagrees with the manifest {split} split: "
-            f"{len(file_ids - manifest_ids)} IDs only in the file, "
-            f"{len(manifest_ids - file_ids)} only in the manifest"
-        )
+        raise ValueError(ERROR_MESSAGES["id_file_disagrees"].format(
+            filename=filename, split=split,
+            only_in_file=len(file_ids - manifest_ids),
+            only_in_manifest=len(manifest_ids - file_ids),
+        ))
 
 
 def _validate_load_params(split: str, chunksize: int) -> None:
     """Reject the locked test split, unknown splits and a non-positive chunksize."""
     if split == "test":
-        raise ValueError(TEST_SPLIT_LOCKED_MESSAGE)
+        raise ValueError(ERROR_MESSAGES["test_split_locked"])
     if split not in LOADABLE_SPLITS:
-        raise ValueError(f"Unknown split: {split!r}")
+        raise ValueError(ERROR_MESSAGES["unknown_split"].format(split=split))
     if chunksize < 1:
-        raise ValueError("chunksize must be positive")
+        raise ValueError(ERROR_MESSAGES["non_positive_chunksize"])
 
 
 def _load_split_manifest(
@@ -313,19 +378,19 @@ def _load_split_manifest(
     """Load the validated manifest and return (split statistics, the split's rows)."""
     manifest, stats = load_manifest(data_dir)
     if config["split_version"] != stats.get("split_version"):
-        raise ValueError("Feature config split version disagrees with split statistics")
+        raise ValueError(ERROR_MESSAGES["split_version_mismatch"])
     if "raw_rows" not in stats:
-        raise ValueError("split_statistics.json has no raw_rows count")
+        raise ValueError(ERROR_MESSAGES["missing_raw_rows"])
     split_manifest = manifest.loc[manifest["split"].eq(split)].copy()
     if split_manifest.empty:
-        raise ValueError(f"No rows found for {split}")
+        raise ValueError(ERROR_MESSAGES["empty_split"].format(split=split))
     return stats, split_manifest
 
 
 def _validate_header(raw_fields: list[str], header: set[str]) -> None:
     """Require every column the loader reads to be present in the raw CSV header."""
     if missing := [column for column in raw_fields if column not in header]:
-        raise ValueError(f"Raw CSV is missing configured columns: {missing}")
+        raise ValueError(ERROR_MESSAGES["raw_missing_columns"].format(columns=missing))
 
 
 def _validate_read(
@@ -333,9 +398,9 @@ def _validate_read(
 ) -> None:
     """Require the full raw record count and at least one retained split record."""
     if records_seen != stats["raw_rows"]:
-        raise ValueError("Raw CSV record count disagrees with split statistics")
+        raise ValueError(ERROR_MESSAGES["raw_record_count"])
     if not pieces:
-        raise ValueError("No requested source records were found")
+        raise ValueError(ERROR_MESSAGES["no_source_records"])
 
 
 def _merge_and_validate_source_rows(
@@ -349,19 +414,17 @@ def _merge_and_validate_source_rows(
     unmatched = ~rows["_merge"].eq("both")
     if unmatched.any():
         sample = rows.loc[unmatched, "loan_id"].head(5).tolist()
-        raise ValueError(
-            f"{int(unmatched.sum())} manifest rows have no source record, e.g. {sample}"
-        )
+        raise ValueError(ERROR_MESSAGES["unmatched_manifest_rows"].format(
+            count=int(unmatched.sum()), sample=sample,
+        ))
 
     issue_dates = pd.to_datetime(rows["issue_d"], format=DATE_FORMAT, errors="coerce")
     months = issue_dates.dt.strftime("%Y-%m")
     if not months.eq(rows["issue_month"]).all():
-        raise ValueError(
-            "Issue-month alignment failed; check the source version and one-based row numbering"
-        )
+        raise ValueError(ERROR_MESSAGES["issue_month_alignment"])
     observed_target = rows["loan_status"].map(STATUS_TO_TARGET)
     if not observed_target.eq(rows["target"]).all():
-        raise ValueError("Status/target alignment failed; do not use this source mapping")
+        raise ValueError(ERROR_MESSAGES["status_target_alignment"])
     # loan_status is the label's source field; drop it before any feature code runs.
     return rows.drop(columns=["_merge", "loan_status"])
 
@@ -401,9 +464,9 @@ def _validate_output(
 ) -> None:
     """Require one unique row per manifest row, with features and target aligned."""
     if not features.index.is_unique or len(features) != len(split_manifest):
-        raise ValueError("Output rows do not match the manifest split one-to-one")
+        raise ValueError(ERROR_MESSAGES["output_not_one_to_one"])
     if not features.index.equals(target.index):
-        raise ValueError("Feature and target rows are not aligned on loan_id")
+        raise ValueError(ERROR_MESSAGES["output_not_aligned"])
 
 
 def load_tabular_split(
