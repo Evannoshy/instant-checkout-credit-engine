@@ -81,6 +81,26 @@ REQUIRED_FEATURE_CONFIG_KEYS = {
     "target_column", "source", "derived", "model", "categories", "prohibited",
 }
 
+# Columns no feature-set version may use, whatever its [prohibited] lists say: the
+# post-origination/outcome fields of docs/feature-policy-draft.md §6.1 (point-in-time
+# leakage) and synthetic_desc (systems-lane data, D-013). Policy exclusions that a
+# later version could revisit (e.g. int_rate, zip_code) stay in the config only.
+ALWAYS_PROHIBITED = frozenset({
+    "loan_status",
+    "out_prncp", "out_prncp_inv",
+    "total_pymnt", "total_pymnt_inv", "total_rec_prncp", "total_rec_int", "total_rec_late_fee",
+    "recoveries", "collection_recovery_fee",
+    "last_pymnt_d", "last_pymnt_amnt", "next_pymnt_d", "last_credit_pull_d",
+    "pymnt_plan",
+    "hardship_flag", "hardship_type", "hardship_reason", "hardship_status", "hardship_amount",
+    "hardship_start_date", "hardship_end_date", "hardship_length", "hardship_dpd",
+    "hardship_loan_status", "hardship_payoff_balance_amount", "hardship_last_payment_amount",
+    "deferral_term", "payment_plan_start_date", "orig_projected_additional_accrued_interest",
+    "debt_settlement_flag", "debt_settlement_flag_date", "settlement_status", "settlement_date",
+    "settlement_amount", "settlement_percentage", "settlement_term",
+    "synthetic_desc",
+})
+
 # Every ValueError message raised by this module, as str.format templates.
 # Placeholders are filled at the raise site; messages with none are used as-is.
 # The test-split message is owned by src/tabular/evaluate.py and only referenced.
@@ -148,7 +168,8 @@ def load_feature_config(path: str | Path = DEFAULT_FEATURE_CONFIG) -> dict[str, 
     has the wrong number of columns, or a transform/categorical has no
     implementation. The prohibited check covers every column the loader
     reads for features: model features, source features, reference columns
-    and derived-feature inputs.
+    and derived-feature inputs. Prohibited means the config's [prohibited]
+    lists plus ALWAYS_PROHIBITED, which no config can remove.
     """
     with Path(path).open("rb") as stream:
         config = tomllib.load(stream)
@@ -164,7 +185,8 @@ def load_feature_config(path: str | Path = DEFAULT_FEATURE_CONFIG) -> dict[str, 
     reference = list(config["source"].get("reference_columns", []))
     derived = config["derived"]
     features = feature_columns(config)
-    prohibited = {column for group in config["prohibited"].values() for column in group}
+    config_prohibited = {column for group in config["prohibited"].values() for column in group}
+    prohibited = ALWAYS_PROHIBITED | config_prohibited
 
     derived_inputs: set[str] = set()
     for name, spec in derived.items():

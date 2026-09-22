@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal, assert_series_equal
 
-from src.tabular.preprocess import ERROR_MESSAGES, load_tabular_split, load_feature_config
+from src.tabular.preprocess import ERROR_MESSAGES, load_feature_config, load_tabular_split
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -316,6 +316,22 @@ def test_config_rejects_prohibited_model_and_source_feature(
             ),
         ],
     )
+    with pytest.raises(ValueError, match=error_pattern("prohibited_columns")):
+        load_feature_config(path)
+
+
+def test_config_cannot_remove_always_prohibited_columns(tmp_path: Path) -> None:
+    """A post-outcome field stays prohibited even when the config's own lists omit it."""
+    text = FEATURE_CONFIG.read_text(encoding="utf-8")
+    text = re.sub(r"\[prohibited\].*", "[prohibited]\n", text, flags=re.DOTALL)
+    for old, new in [
+        ('features = ["loan_amnt", "term",', 'features = ["total_pymnt", "loan_amnt", "term",'),
+        ('numeric = ["loan_amnt",', 'numeric = ["total_pymnt", "loan_amnt",'),
+    ]:
+        assert old in text, f"Expected feature-config text was not found: {old}"
+        text = text.replace(old, new, 1)
+    path = tmp_path / "empty_prohibited.toml"
+    path.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError, match=error_pattern("prohibited_columns")):
         load_feature_config(path)
 
