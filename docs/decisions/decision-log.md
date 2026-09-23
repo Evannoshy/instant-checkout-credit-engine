@@ -353,7 +353,7 @@ real-data check returns 86,293 training rows and 21,784 validation rows.
 A documented preprocessing defect, new data source or approved
 `tabular_features_v2` proposal is demonstrated.
 
-## 5. How to add a decision
+## 5. Adding a decision
 
 Use this structure:
 
