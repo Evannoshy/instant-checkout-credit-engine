@@ -1,7 +1,7 @@
 """Regression tests using tiny, artificial examples (no borrower data).
 
 From the repository root, show each check and its actual pytest result with:
-    python -m pytest  -v -s
+    python -m pytest src/tabular/test_tabular_preprocess.py -v -s
 
 The -s flag shows print statements; -v shows each PASSED/FAILED result.
 """
