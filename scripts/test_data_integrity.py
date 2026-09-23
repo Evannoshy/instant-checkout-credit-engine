@@ -121,7 +121,7 @@ def test_split_manifest_row_counts_match_ids_files(manifest):
     manifest_counts = manifest["split"].value_counts()
     for name, expected in EXPECTED_COUNTS.items():
         manifest_split = MANIFEST_SPLIT_NAME[name]
-        actual = int(manifest_counts(get(manifest_split, 0))
+        actual = int(manifest_counts.get(manifest_split, 0))
         assert actual == expected, f"split_manifest rows with split=='{manifest_split}' == {expected} (got {actual})"
 
 
