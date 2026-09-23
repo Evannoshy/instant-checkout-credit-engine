@@ -4,8 +4,13 @@ From the repository root, show each check and its actual pytest result with:
     python -m pytest scripts/test_data_integrity.py -v -s
 
 The -s flag shows print statements; -v shows each PASSED/FAILED result.
+
+The raw source defaults to data/raw/loan.csv. Set ``LENDINGCLUB_RAW_CSV`` to use
+a different file. Tests that require the restricted raw file are skipped when
+it is unavailable; manifest and split-file checks still run.
 """
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +19,7 @@ import pytest
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 RAW_DIR = DATA_DIR / "raw"
+RAW_CSV = Path(os.environ.get("LENDINGCLUB_RAW_CSV", RAW_DIR / "loan.csv"))
 
 EXPECTED_COUNTS = {"train": 86293, "val": 21784, "test": 14922}
 ID_FILES = {
@@ -42,18 +48,31 @@ def manifest():
 
 
 @pytest.fixture(scope="module")
-def raw_row_count():
-    with open(RAW_DIR / "loan.csv", encoding="utf-8") as fh:
+def raw_csv_path():
+    """Return the local restricted source or skip only tests that require it."""
+    if not RAW_CSV.is_file():
+        pytest.skip(
+            f"Raw LendingClub CSV not found at {RAW_CSV}; set LENDINGCLUB_RAW_CSV "
+            "to run raw-source integrity checks."
+        )
+    return RAW_CSV
+
+
+@pytest.fixture(scope="module")
+def raw_row_count(raw_csv_path):
+    with open(raw_csv_path, encoding="utf-8") as fh:
         return sum(1 for _ in fh) - 1  # exclude header
 
 
 @pytest.fixture(scope="module")
-def raw_fields_for_manifest_rows(manifest):
+def raw_fields_for_manifest_rows(manifest, raw_csv_path):
     """issue_d and loan_status from loan.csv, aligned to each manifest row's source_row_number."""
     wanted = np.fromiter(manifest["source_row_number"], dtype=np.int64)
     row_number = 0
     frames = []
-    for chunk in pd.read_csv(RAW_DIR / "loan.csv", usecols=["issue_d", "loan_status"], chunksize=200_000):
+    for chunk in pd.read_csv(
+        raw_csv_path, usecols=["issue_d", "loan_status"], chunksize=200_000
+    ):
         row_numbers = np.arange(row_number + 1, row_number + 1 + len(chunk))
         mask = np.isin(row_numbers, wanted)
         if mask.any():

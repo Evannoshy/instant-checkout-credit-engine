@@ -136,7 +136,7 @@ def test_load_manifest_rejects_non_binary_target(artificial_data_dir):
     """A target value outside {0, 1} is rejected."""
     path = artificial_data_dir / "split_manifest.csv"
     frame = pd.read_csv(path)
-    frame.loc[0, "target"] = 2
+    frame.loc[0, "target"] = '2'
     frame.to_csv(path, index=False)
     with pytest.raises(ValueError):
         load_manifest(artificial_data_dir)

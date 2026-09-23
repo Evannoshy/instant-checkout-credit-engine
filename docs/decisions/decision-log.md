@@ -1,7 +1,7 @@
 # Decision Log
 
-**Project:** Instant Checkout Credit Engine  
-**Document owner:** Tabular Track Tech Lead  
+**Project:** Instant Checkout Credit Engine
+**Document owner:** Tabular Track Tech Lead
 **Created:** 7 September 2026
 
 ## 1. Purpose
@@ -35,13 +35,14 @@ This log records decisions that affect the tabular track or its contracts with t
 | D-013 | Generate 3,000 training-only synthetic descriptions with no synthetic labels | Accepted with conditions | Project co-leads | 10 Sep 2026 | Pilot fails quality, privacy or leakage checks |
 | D-014 | Exchange out-of-fold default probabilities between tracks | Accepted | Tabular + NLP + fusion leads | 10 Sep 2026 | Fusion evaluation justifies a versioned replacement |
 | D-015 | Freeze an executable, exact-match definition of the v1 LendingClub cohort | Accepted | Tabular + NLP leads | 19 Sep 2026 | Material cohort defect or source change is demonstrated |
+| D-016 | Approve the nine-feature `tabular_features_v1` baseline contract | Accepted | Tabular lead | 23 Sep 2026 | A documented defect or approved v2 proposal is demonstrated |
 
 ## 4. Detailed decision records
 
 ## D-001 - Prediction unit
 
-**Status:** Proposed  
-**Owner:** Tabular Track Tech Lead  
+**Status:** Proposed
+**Owner:** Tabular Track Tech Lead
 **Decision:** One row represents one request to finance one checkout basket at one decision timestamp.
 
 ### Context
@@ -72,8 +73,8 @@ Use the application/checkout request because the system is called at checkout an
 
 ## D-002 - Proposed primary outcome
 
-**Status:** Proposed  
-**Owner:** Tabular Track Tech Lead and project co-leads  
+**Status:** Proposed
+**Owner:** Tabular Track Tech Lead and project co-leads
 **Decision:** Use probability of 30+ days past due within 90 days of first contractual due date, or earlier charge-off.
 
 ### Rationale
@@ -88,8 +89,8 @@ The proposal is more meaningful than any late payment and fits a short-term cred
 
 ## D-003 - Point-in-time feature boundary
 
-**Status:** Proposed  
-**Owner:** Tabular Track Tech Lead  
+**Status:** Proposed
+**Owner:** Tabular Track Tech Lead
 **Decision:** A feature is eligible only when its availability timestamp is at or before the application decision timestamp.
 
 ### Consequences
@@ -101,8 +102,8 @@ The proposal is more meaningful than any late payment and fits a short-term cred
 
 ## D-004 - Two-lane data strategy
 
-**Status:** Proposed  
-**Owner:** Tabular lead and project co-leads  
+**Status:** Proposed
+**Owner:** Tabular lead and project co-leads
 **Decision:** Use a real permitted credit dataset for model evidence and a separate BNPL-shaped synthetic dataset for systems/fusion/demo work, unless representative partner data is approved.
 
 ### Rationale
@@ -117,8 +118,8 @@ Synthetic data can validate engineering behaviour but cannot establish real cred
 
 ## D-005 - Shared cross-track manifest
 
-**Status:** Proposed  
-**Owner:** Tabular and NLP Track Leads  
+**Status:** Proposed
+**Owner:** Tabular and NLP Track Leads
 **Decision:** Both tracks consume one versioned eligibility/label/split manifest.
 
 ### Minimum fields
@@ -140,8 +141,8 @@ Synthetic data can validate engineering behaviour but cannot establish real cred
 
 ## D-006 - Tabular output semantics
 
-**Status:** Proposed  
-**Owner:** Tabular and Fusion/API Leads  
+**Status:** Proposed
+**Owner:** Tabular and Fusion/API Leads
 **Decision:** The tabular component exports raw margin, uncalibrated PD, calibrated PD, model/schema versions, quality flags, reason candidates and processing time.
 
 ### Rationale
@@ -156,8 +157,8 @@ The fusion team needs explicit score semantics. Calibration and raw decision fun
 
 ## D-007 - Separate score and policy
 
-**Status:** Proposed  
-**Owner:** Track leads  
+**Status:** Proposed
+**Owner:** Track leads
 **Decision:** Tabular/text models estimate risk; fusion combines evidence; the policy layer owns approve/decline/refer thresholds and fallback.
 
 ### Rationale
@@ -172,8 +173,8 @@ Separating these concerns makes calibration, thresholds, business assumptions an
 
 ## D-008 - Logistic regression is a real champion candidate
 
-**Status:** Proposed  
-**Owner:** Tabular Track Tech Lead  
+**Status:** Proposed
+**Owner:** Tabular Track Tech Lead
 **Decision:** Regularized logistic regression/scorecard remains eligible to win if XGBoost does not demonstrate material, stable and defensible improvement.
 
 ### Rationale
@@ -187,8 +188,8 @@ A simpler model may offer better calibration, explanation stability, operational
 
 ## D-009 - SHAP claim boundary
 
-**Status:** Proposed  
-**Owner:** Project co-leads  
+**Status:** Proposed
+**Owner:** Project co-leads
 **Decision:** SHAP is used for global/local contribution diagnostics and reason-candidate testing. It is not described as proof of causality, fairness or regulatory compliance.
 
 ### Consequences
@@ -199,8 +200,8 @@ A simpler model may offer better calibration, explanation stability, operational
 
 ## D-010 - Latency SLO definition
 
-**Status:** Proposed  
-**Owner:** Fusion/API Lead  
+**Status:** Proposed
+**Owner:** Fusion/API Lead
 **Decision:** Treat the deck's under-100 ms goal as a warmed end-to-end p95 SLO on frozen hardware and concurrency; propose a warmed tabular p95 budget of 10 ms for feature transformation, prediction and calibration.
 
 ### Conditions to freeze
@@ -314,7 +315,45 @@ stored in `reports/data/cohort_reproduction_v1.json`.
 A material cohort defect, source-file change or approved replacement dataset is
 demonstrated.
 
-## 5. How to add a decision
+## D-016 - Tabular feature set v1
+
+**Status:** Accepted
+**Owner:** Tabular Track Tech Lead
+**Decision date:** 23 September 2026
+
+### Decision
+
+Approve `configs/tabular_features_v1.toml` as the feature contract for the first
+logistic-regression baseline. The model receives seven numeric features and two
+categorical features derived from nine application-time LendingClub columns.
+
+The approved model features are `loan_amnt`, `annual_inc_log`, `dti`,
+`revol_util`, `delinq_2yrs`, `inq_last_6mths`, `credit_history_months`, `term`
+and `home_ownership`.
+
+### Conditions
+
+- The twelve Discuss features and the unreviewed bureau columns remain excluded.
+- Post-origination, outcome, identifier, text and synthetic-text fields remain
+  excluded.
+- `load_tabular_split` may return only train or validation rows and must reject
+  the locked test split.
+- Missing-value imputation, scaling and one-hot encoding are fitted by the model
+  pipeline using training rows only.
+- Any change requires a new feature-set version rather than an in-place edit.
+
+### Evidence
+
+The preprocessing suite covers the feature order, transformations, missing-value
+handling, prohibited columns, split isolation and deterministic output. The
+real-data check returns 86,293 training rows and 21,784 validation rows.
+
+### Revisit trigger
+
+A documented preprocessing defect, new data source or approved
+`tabular_features_v2` proposal is demonstrated.
+
+## 5. Adding a decision
 
 Use this structure:
 
