@@ -51,7 +51,7 @@ tmp/
 temp/
 *.log
 
-# Editors and operating systems
+# Editors and operating system files
 .vscode/
 .idea/
 .DS_Store
