@@ -1,7 +1,7 @@
 # Decision Log
 
-**Project:** Instant Checkout Credit Engine  
-**Document owner:** Tabular Track Tech Lead  
+**Project:** Instant Checkout Credit Engine
+**Document owner:** Tabular Track Tech Lead
 **Created:** 7 September 2026
 
 ## 1. Purpose
@@ -41,8 +41,8 @@ This log records decisions that affect the tabular track or its contracts with t
 
 ## D-001 - Prediction unit
 
-**Status:** Proposed  
-**Owner:** Tabular Track Tech Lead  
+**Status:** Proposed
+**Owner:** Tabular Track Tech Lead
 **Decision:** One row represents one request to finance one checkout basket at one decision timestamp.
 
 ### Context
@@ -73,8 +73,8 @@ Use the application/checkout request because the system is called at checkout an
 
 ## D-002 - Proposed primary outcome
 
-**Status:** Proposed  
-**Owner:** Tabular Track Tech Lead and project co-leads  
+**Status:** Proposed
+**Owner:** Tabular Track Tech Lead and project co-leads
 **Decision:** Use probability of 30+ days past due within 90 days of first contractual due date, or earlier charge-off.
 
 ### Rationale
@@ -89,8 +89,8 @@ The proposal is more meaningful than any late payment and fits a short-term cred
 
 ## D-003 - Point-in-time feature boundary
 
-**Status:** Proposed  
-**Owner:** Tabular Track Tech Lead  
+**Status:** Proposed
+**Owner:** Tabular Track Tech Lead
 **Decision:** A feature is eligible only when its availability timestamp is at or before the application decision timestamp.
 
 ### Consequences
@@ -102,8 +102,8 @@ The proposal is more meaningful than any late payment and fits a short-term cred
 
 ## D-004 - Two-lane data strategy
 
-**Status:** Proposed  
-**Owner:** Tabular lead and project co-leads  
+**Status:** Proposed
+**Owner:** Tabular lead and project co-leads
 **Decision:** Use a real permitted credit dataset for model evidence and a separate BNPL-shaped synthetic dataset for systems/fusion/demo work, unless representative partner data is approved.
 
 ### Rationale
@@ -118,8 +118,8 @@ Synthetic data can validate engineering behaviour but cannot establish real cred
 
 ## D-005 - Shared cross-track manifest
 
-**Status:** Proposed  
-**Owner:** Tabular and NLP Track Leads  
+**Status:** Proposed
+**Owner:** Tabular and NLP Track Leads
 **Decision:** Both tracks consume one versioned eligibility/label/split manifest.
 
 ### Minimum fields
@@ -141,8 +141,8 @@ Synthetic data can validate engineering behaviour but cannot establish real cred
 
 ## D-006 - Tabular output semantics
 
-**Status:** Proposed  
-**Owner:** Tabular and Fusion/API Leads  
+**Status:** Proposed
+**Owner:** Tabular and Fusion/API Leads
 **Decision:** The tabular component exports raw margin, uncalibrated PD, calibrated PD, model/schema versions, quality flags, reason candidates and processing time.
 
 ### Rationale
@@ -157,8 +157,8 @@ The fusion team needs explicit score semantics. Calibration and raw decision fun
 
 ## D-007 - Separate score and policy
 
-**Status:** Proposed  
-**Owner:** Track leads  
+**Status:** Proposed
+**Owner:** Track leads
 **Decision:** Tabular/text models estimate risk; fusion combines evidence; the policy layer owns approve/decline/refer thresholds and fallback.
 
 ### Rationale
@@ -173,8 +173,8 @@ Separating these concerns makes calibration, thresholds, business assumptions an
 
 ## D-008 - Logistic regression is a real champion candidate
 
-**Status:** Proposed  
-**Owner:** Tabular Track Tech Lead  
+**Status:** Proposed
+**Owner:** Tabular Track Tech Lead
 **Decision:** Regularized logistic regression/scorecard remains eligible to win if XGBoost does not demonstrate material, stable and defensible improvement.
 
 ### Rationale
@@ -188,8 +188,8 @@ A simpler model may offer better calibration, explanation stability, operational
 
 ## D-009 - SHAP claim boundary
 
-**Status:** Proposed  
-**Owner:** Project co-leads  
+**Status:** Proposed
+**Owner:** Project co-leads
 **Decision:** SHAP is used for global/local contribution diagnostics and reason-candidate testing. It is not described as proof of causality, fairness or regulatory compliance.
 
 ### Consequences
@@ -200,8 +200,8 @@ A simpler model may offer better calibration, explanation stability, operational
 
 ## D-010 - Latency SLO definition
 
-**Status:** Proposed  
-**Owner:** Fusion/API Lead  
+**Status:** Proposed
+**Owner:** Fusion/API Lead
 **Decision:** Treat the deck's under-100 ms goal as a warmed end-to-end p95 SLO on frozen hardware and concurrency; propose a warmed tabular p95 budget of 10 ms for feature transformation, prediction and calibration.
 
 ### Conditions to freeze
