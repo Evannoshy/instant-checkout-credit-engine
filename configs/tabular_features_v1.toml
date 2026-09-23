@@ -9,7 +9,7 @@ features = ["loan_amnt", "term", "annual_inc", "dti", "revol_util",
             "delinq_2yrs", "inq_last_6mths", "earliest_cr_line", "home_ownership"]
 reference_columns = ["issue_d"]     # used to derive tenure; never a model feature
 
-[derived]   
+[derived]
 annual_inc_log = { from = ["annual_inc"], transform = "log1p" }
 credit_history_months = { from = ["earliest_cr_line", "issue_d"], transform = "months_between" }
 
