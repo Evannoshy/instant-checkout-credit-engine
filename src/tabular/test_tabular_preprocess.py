@@ -1,4 +1,4 @@
-python -m pytest src/tabular/test_tabular_preprocess.py -v -s"""Regression tests using tiny, artificial examples (no borrower data).
+"""Regression tests using tiny, artificial examples (no borrower data).
 
 From the repository root, show each check and its actual pytest result with:
     python -m pytest  -v -s
