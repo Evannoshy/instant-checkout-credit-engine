@@ -92,18 +92,20 @@ freshly generated `logistic_baseline_metrics.json` — not retyped from memory.
 | Constant baseline (existing result) | 0.5 | 0.1514 | **0.1285** | **0.4251** |
 | Logistic regression (new result) | **0.6679** | **0.2594** | 0.2321 | 0.6577 |
 
-**Honest reading of this table:** logistic regression clearly improves *discrimination* — it can
-actually rank riskier loans above safer ones (ROC-AUC 0.668 vs. pure chance at 0.5; PR-AUC 0.259 vs.
-the 0.151 floor). But it is *worse calibrated* than the constant model on both Brier score and log
-loss. This is not a bug; it is the direct, expected cost of `class_weight="balanced"`, which
-reweights the training loss to treat both classes as equally important. That deliberately pushes
-predicted probabilities away from the true ~15% base rate to keep the model sensitive to the
-minority (default) class — exactly what F1 @ 0.5 (0.338 vs. the constant model's 0.0, since a
-constant 0.153 score never crosses a 0.5 cutoff) and the confusion matrix above show: the model
-actually flags positives instead of only ever predicting "no default." The trade-off is real
-probabilities that are less numerically accurate in absolute terms. A future iteration could compare
-an unweighted (`class_weight=None`) model or apply post-hoc probability calibration (e.g. Platt
-scaling) if better-calibrated probabilities become the priority over recall on defaults.
+**Reading of this table:** logistic regression clearly improves *discrimination*. It ranks riskier
+loans above safer ones more effectively than the constant baseline (ROC-AUC 0.668 vs. 0.5 and
+PR-AUC 0.259 vs. 0.151). However, its outputs are not calibrated estimates of a loan's probability
+of default. The model's mean validation score is 0.477 while the observed validation default rate is
+0.151. The Brier score and log loss are therefore worse than the constant model.
+
+This result is an expected consequence of `class_weight="balanced"`. The setting gives additional
+weight to defaulted loans during training, which helps the model identify more of them but changes
+the meaning of the output values. For this experiment, `p_default_tabular` must be treated as an
+uncalibrated risk score rather than a probability of default. Before the score is used for model
+fusion, credit decisions, or customer-facing risk estimates, a later experiment must compare an
+unweighted model or fit a probability-calibration step using training data only. F1 at the 0.5
+threshold and the confusion matrix are included as diagnostic results, not as an approved operating
+threshold.
 
 ## 7. Calibration
 
@@ -122,25 +124,28 @@ distinct signal than it does. All 13 are reported instead, ranked, so nothing is
 
 | Feature | Coefficient | Reading |
 |---|---:|---|
-| `term_60` | +0.486 | 60-month loans associate with higher predicted default risk |
-| `home_ownership_OTHER` | +0.425 | The rare/collapsed "OTHER" housing category associates with higher risk |
+| `term_60` | +0.486 | Higher fitted score than `term_36` within the term feature |
+| `home_ownership_OTHER` | +0.425 | Highest fitted score among the encoded home-ownership levels |
 | `revol_util` | +0.239 | Higher revolving-credit utilization associates with higher risk |
 | `inq_last_6mths` | +0.237 | More recent credit inquiries associate with higher risk |
 | `loan_amnt` | +0.169 | Larger loans associate with higher risk |
 | `delinq_2yrs` | +0.070 | More recent delinquencies associate with higher risk |
 | `dti` | +0.057 | Higher debt-to-income associates with higher risk |
-| `home_ownership_RENT` | -0.017 | Renting associates with marginally lower risk |
+| `home_ownership_RENT` | -0.017 | Second-highest fitted score among the encoded home-ownership levels |
 | `credit_history_months` | -0.041 | Longer credit history associates with lower risk |
-| `home_ownership_OWN` | -0.071 | Owning outright associates with lower risk |
-| `home_ownership_MORTGAGE` | -0.193 | Having a mortgage associates with lower risk |
+| `home_ownership_OWN` | -0.071 | Third-highest fitted score among the encoded home-ownership levels |
+| `home_ownership_MORTGAGE` | -0.193 | Lowest fitted score among the encoded home-ownership levels |
 | `annual_inc_log` | -0.329 | Higher income associates with lower risk |
-| `term_36` | -0.342 | 36-month loans associate with lower risk |
+| `term_36` | -0.342 | Lower fitted score than `term_60` within the term feature |
 
-**These are associations learned by the fitted model, not causal effects.** No claim is made about
-what would happen if a borrower's term or home-ownership status changed; `term_36`/`term_60` and
-`home_ownership_*` are complementary one-hot levels of the same two underlying categorical features,
-so their coefficients are mirror images by construction, not two independent findings. This mirrors
-this repository's existing SHAP-is-not-causal convention (decision D-009).
+**These are associations learned by the fitted model, not causal effects.** Numeric coefficients
+describe changes in the fitted score after standardisation. The categorical encoder retains every
+level, so an individual categorical coefficient is not a comparison against an omitted reference
+category. Its sign depends on the chosen encoding and regularisation. The categorical rows should
+therefore be read as contrasts between levels of the same feature, not as independent effects. For
+example, the difference between `term_60` and `term_36` is meaningful within this fitted model, but
+neither coefficient alone is evidence that changing a loan's term would change its default risk.
+This follows the repository's existing non-causal explanation convention in decision D-009.
 
 ## 9. Verification
 
@@ -160,9 +165,9 @@ validation loans and never sees a test row.
 
 ## 10. Known limitations and rollback
 
-- **Calibration is worse than the constant baseline** — an expected, explained consequence of
-  `class_weight="balanced"` (§6), not an error. Flagged here so a reader doesn't need to re-derive
-  the explanation.
+- **Calibration is worse than the constant baseline.** This is an expected consequence of
+  `class_weight="balanced"`, but it remains a material limitation. The output must be treated as an
+  uncalibrated risk score until a later experiment evaluates an unweighted or calibrated model.
 - **No hyperparameter search** — per the task brief, Week 2 intentionally used one fixed
   configuration rather than tuning `C` or trying alternate solvers/penalties.
 - **13 coefficients, not 20** — the "ten highest / ten lowest" framing doesn't cleanly apply to a
