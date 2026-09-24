@@ -1,0 +1,14 @@
+feature,coefficient
+categorical__term_60,0.48620910024526665
+categorical__home_ownership_OTHER,0.42512383313707286
+numeric__revol_util,0.23858885846685893
+numeric__inq_last_6mths,0.23698035129109865
+numeric__loan_amnt,0.16938080463815128
+numeric__delinq_2yrs,0.06989024117262894
+numeric__dti,0.05685448905912021
+categorical__home_ownership_RENT,-0.016682670737247253
+numeric__credit_history_months,-0.04062971254570982
+categorical__home_ownership_OWN,-0.07111835678045839
+categorical__home_ownership_MORTGAGE,-0.19347338997465052
+numeric__annual_inc_log,-0.3292440507025318
+categorical__term_36,-0.34235968460055183

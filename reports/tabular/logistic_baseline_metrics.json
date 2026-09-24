@@ -1,0 +1,45 @@
+{
+  "baseline_version": "tabular-logistic-v1",
+  "model_name": "logistic_regression",
+  "model_version": "tabular-logistic-v1",
+  "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+  "split_version": "split-v1",
+  "cohort": "real_text_matured_v1",
+  "test_rows_available_to_model": 0,
+  "logistic_config": {
+    "C": 1.0,
+    "class_weight": "balanced",
+    "max_iter": 1000,
+    "random_state": 42
+  },
+  "train": {
+    "rows": 86293,
+    "positives": 13197
+  },
+  "validation": {
+    "rows": 21784,
+    "positives": 3298,
+    "prevalence": 0.15139551964744766,
+    "roc_auc": 0.6679297469765033,
+    "roc_auc_baseline": 0.5,
+    "pr_auc": 0.2594412053841364,
+    "pr_auc_baseline": 0.15139551964744766,
+    "brier_score": 0.23213831609216826,
+    "log_loss": 0.657697664433428,
+    "f1_at_0.5": 0.3378491386519485,
+    "f1_best": 0.34256978653530373,
+    "f1_best_threshold": 0.5480380647005269,
+    "confusion_matrix_at_0.5": {
+      "tn": 11846,
+      "fp": 6640,
+      "fn": 1278,
+      "tp": 2020
+    }
+  },
+  "environment": {
+    "python": "3.12.1",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1"
+  }
+}
