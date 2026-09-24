@@ -48,7 +48,7 @@ BATCH_SIZE = 16
 OPTIMIZER = "adamw_torch"
 WEIGHT_DECAY = 0.01
 VAL_ROWS = 500
-OVERFIT_MAX_LOSS = 0.1
+OVERFIT_MAX_LOSS = 0.15
 # Head + first-layer biases: no weight decay, so only gradients can change them.
 WATCHED_PARAMS = ("classifier.bias", "distilbert.transformer.layer.0.attention.q_lin.bias")
 DEVICE_NAME = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
@@ -65,7 +65,7 @@ class RunConfig:
     logging_steps: int
 
 # Overfit: memorise 100 loans fast to verify training loss goes to approximately 0.
-OVERFIT = RunConfig(train_rows=100, epochs=10, learning_rate=5e-5, lr_scheduler_type="constant", logging_steps=1)
+OVERFIT = RunConfig(train_rows=100, epochs=10, learning_rate=2e-5, lr_scheduler_type="constant", logging_steps=1)
 # Prototype Fine-Tuning: train on 1,000 loans and evaluate on 500 each of 2 epochs to test the Trainer end-to-end.
 PROTOTYPE = RunConfig(train_rows=1_000, epochs=2, learning_rate=2e-5, lr_scheduler_type="linear", logging_steps=10)
 

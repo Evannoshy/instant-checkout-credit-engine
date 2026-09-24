@@ -83,8 +83,8 @@ def test_prototype_uses_the_specified_hyperparameters():
 
 
 def test_overfit_uses_the_specified_sample_and_epochs():
-    """Overfit gate: 100 train loans for 10 epochs."""
-    assert (proto.OVERFIT.train_rows, proto.OVERFIT.epochs) == (100, 10)
+    """Overfit gate: 100 train loans for 10 epochs at the recommended lr 2e-5."""
+    assert (proto.OVERFIT.train_rows, proto.OVERFIT.epochs, proto.OVERFIT.learning_rate) == (100, 10, 2e-5)
 
 
 def test_build_trainer_passes_the_run_config_to_the_trainer(tiny_model, tokenizer, loans, tmp_path):
