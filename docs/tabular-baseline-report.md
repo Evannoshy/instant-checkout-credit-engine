@@ -128,7 +128,11 @@ rate equals `13197 / 86293` exactly.
 
 ## 9. Next decision
 
-Proceed to the logistic-regression baseline (handbook §12.3, step 3), reusing
-`src/tabular/evaluate.py`'s `load_manifest`, `get_split_targets`, `build_prediction_frame`,
-`validate_prediction_frame`, and `evaluate_predictions` unchanged, and comparing its validation
-metrics directly against the floor recorded in §5 above.
+**Update, 24 September 2026:** Done. The logistic-regression baseline (handbook §12.3, step 3) is
+complete — see `reports/tabular/logistic_baseline_report.md` (experiment
+`TAB-20260924-001-logistic-baseline`). It reused `src/tabular/evaluate.py`'s `load_manifest`,
+`get_split_targets`, `build_prediction_frame`, `validate_prediction_frame`, and
+`evaluate_predictions` unchanged, as planned, and beat this floor on ROC-AUC (0.668 vs. 0.5) and
+PR-AUC (0.259 vs. 0.151), while landing worse on Brier score and log loss — an explained trade-off
+from `class_weight="balanced"`, not a defect. Next: an XGBoost challenger on the same rows, splits
+and metric functions (handbook §12.3, step 4).
