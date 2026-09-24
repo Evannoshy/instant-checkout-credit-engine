@@ -130,6 +130,7 @@ def build_trainer(
         fp16=mixed == "fp16",
         train_sampling_strategy="group_by_length",  # Batches similar lengths -> less padding
         save_strategy="no",  # Only the final model is saved, explicitly
+        dataloader_pin_memory=torch.cuda.is_available(),
         seed=RANDOM_STATE,
     )
     return Trainer(
