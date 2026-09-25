@@ -1,0 +1,74 @@
+{
+  "model_name": "distilbert-base-uncased",
+  "preprocess_version": "nlp-preprocess-v1",
+  "config": {
+    "train_rows": 1000,
+    "epochs": 2,
+    "learning_rate": 2e-05,
+    "lr_scheduler_type": "linear",
+    "logging_steps": 10,
+    "val_rows": 500,
+    "batch_size": 16,
+    "max_length": 384,
+    "optimizer": "adamw_torch",
+    "weight_decay": 0.01,
+    "precision": "fp16",
+    "seed": 42
+  },
+  "train": {
+    "rows": 1000,
+    "positives": 153,
+    "steps": 126,
+    "mean_loss": 0.4361796152024042,
+    "runtime_seconds": 6.2125
+  },
+  "validation": {
+    "rows": 500,
+    "positives": 76,
+    "prevalence": 0.152,
+    "loss": 0.42737242579460144,
+    "pr_auc": 0.16721517420358561,
+    "pr_auc_baseline": 0.152,
+    "roc_auc": 0.5046238828202583,
+    "roc_auc_baseline": 0.5,
+    "f1_at_0.5": 0.0,
+    "f1_best": 0.27087198515769945,
+    "f1_best_threshold": 0.12220857292413712
+  },
+  "validation_by_epoch": [
+    {
+      "epoch": 1,
+      "rows": 500,
+      "positives": 76,
+      "prevalence": 0.152,
+      "loss": 0.4331151247024536,
+      "pr_auc": 0.1694297422277303,
+      "pr_auc_baseline": 0.152,
+      "roc_auc": 0.5144302383316782,
+      "roc_auc_baseline": 0.5,
+      "f1_at_0.5": 0.0,
+      "f1_best": 0.2742230347349177,
+      "f1_best_threshold": 0.09392703324556351
+    },
+    {
+      "epoch": 2,
+      "rows": 500,
+      "positives": 76,
+      "prevalence": 0.152,
+      "loss": 0.42737242579460144,
+      "pr_auc": 0.16721517420358561,
+      "pr_auc_baseline": 0.152,
+      "roc_auc": 0.5046238828202583,
+      "roc_auc_baseline": 0.5,
+      "f1_at_0.5": 0.0,
+      "f1_best": 0.27087198515769945,
+      "f1_best_threshold": 0.12220857292413712
+    }
+  ],
+  "environment": {
+    "python": "3.12.3",
+    "torch": "2.9.0+cu128",
+    "transformers": "5.17.0",
+    "device": "NVIDIA TITAN RTX"
+  }
+}
