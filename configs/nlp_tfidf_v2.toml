@@ -1,0 +1,42 @@
+model_version = "nlp-tfidf-tuned-v1"
+model_name = "tfidf_logistic"
+preprocess_version = "nlp-preprocess-v1"
+feature_set = "text_payload_labels_stripped"
+
+# Fixed across the grid. class_weight follows the repository precedent set by
+# src/nlp/baseline_tfidf.py and src/tabular/logistic_baseline.py. It buys
+# ranking at the cost of calibration, so the exported probability is an
+# UNCALIBRATED PD in the sense of decision D-006 and is labelled as such.
+[model]
+class_weight = "balanced"
+max_iter = 1000
+random_state = 42
+sublinear_tf = true
+
+[grid]
+max_features = [3000, 5000, 10000]
+ngram_range = [[1, 1], [1, 2]]
+C = [0.01, 0.1, 1.0, 10.0]
+
+# Hyperparameters are selected on training folds only; validation is scored
+# once, after selection closes.
+[cv]
+n_splits = 5
+shuffle = true
+random_state = 42
+scoring = "average_precision"
+
+# The exact Week 1 configuration, refitted as a like-for-like reference so the
+# reported improvement is measured rather than asserted. sublinear_tf was the
+# scikit-learn default (false) in Week 1, so it is a confound the grid would
+# otherwise hide.
+[week1_reference]
+max_features = 5000
+ngram_range = [1, 2]
+C = 1.0
+sublinear_tf = false
+
+[bootstrap]
+resamples = 1000
+random_state = 42
+confidence = 0.95

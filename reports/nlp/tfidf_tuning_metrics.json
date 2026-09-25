@@ -1,0 +1,162 @@
+{
+  "model_name": "tfidf_logistic",
+  "model_version": "nlp-tfidf-tuned-v1",
+  "preprocess_version": "nlp-preprocess-v1",
+  "feature_set": "text_payload_labels_stripped",
+  "probability_semantics": "uncalibrated_pd",
+  "test_rows_used": 0,
+  "selection": {
+    "scoring": "average_precision",
+    "cv": {
+      "n_splits": 5,
+      "shuffle": true,
+      "random_state": 42,
+      "scoring": "average_precision"
+    },
+    "grid_size": 24,
+    "selected_on": "train_cross_validation_only",
+    "best_params": {
+      "max_features": 10000,
+      "ngram_range": [
+        1,
+        2
+      ],
+      "C": 0.1,
+      "sublinear_tf": true
+    },
+    "best_mean_cv_pr_auc": 0.21504255987973414,
+    "best_std_cv_pr_auc": 0.0029741645397864925,
+    "fixed_model_settings": {
+      "class_weight": "balanced",
+      "max_iter": 1000,
+      "random_state": 42,
+      "sublinear_tf": true
+    }
+  },
+  "train_out_of_fold": {
+    "rows": 86293,
+    "positives": 13197,
+    "prevalence": 0.1529324510678734,
+    "roc_auc": 0.6121356669665398,
+    "roc_auc_baseline": 0.5,
+    "pr_auc": 0.21436210877513528,
+    "pr_auc_baseline": 0.1529324510678734,
+    "brier_score": 0.2343761757547452,
+    "log_loss": 0.6613454921687504,
+    "f1_at_0.5": 0.2935104795139692,
+    "f1_best": 0.2962449771373147,
+    "f1_best_threshold": 0.4723463675475818,
+    "confusion_matrix_at_0.5": {
+      "threshold": 0.5,
+      "tn": 45705,
+      "fp": 27391,
+      "fn": 6216,
+      "tp": 6981
+    },
+    "confusion_matrix_at_best_f1": {
+      "threshold": 0.4723463675475818,
+      "tn": 37109,
+      "fp": 35987,
+      "fn": 4645,
+      "tp": 8552
+    }
+  },
+  "validation": {
+    "rows": 21784,
+    "positives": 3298,
+    "prevalence": 0.15139551964744766,
+    "roc_auc": 0.5866798991084136,
+    "roc_auc_baseline": 0.5,
+    "pr_auc": 0.19437018232756667,
+    "pr_auc_baseline": 0.15139551964744766,
+    "brier_score": 0.24664169779777878,
+    "log_loss": 0.6866592739450201,
+    "f1_at_0.5": 0.27879677182685253,
+    "f1_best": 0.2859781604824252,
+    "f1_best_threshold": 0.44586982034463196,
+    "confusion_matrix_at_0.5": {
+      "threshold": 0.5,
+      "tn": 10054,
+      "fp": 8432,
+      "fn": 1398,
+      "tp": 1900
+    },
+    "confusion_matrix_at_best_f1": {
+      "threshold": 0.44586982034463196,
+      "tn": 6009,
+      "fp": 12477,
+      "fn": 666,
+      "tp": 2632
+    }
+  },
+  "week1_reference": {
+    "params": {
+      "max_features": 5000,
+      "ngram_range": [
+        1,
+        2
+      ],
+      "C": 1.0,
+      "sublinear_tf": false
+    },
+    "validation": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "roc_auc": 0.5693445786616945,
+      "roc_auc_baseline": 0.5,
+      "pr_auc": 0.1845493036160111,
+      "pr_auc_baseline": 0.15139551964744766,
+      "brier_score": 0.24829625307007494,
+      "log_loss": 0.6906371549560132,
+      "f1_at_0.5": 0.26981076286221173,
+      "f1_best": 0.27735916756368856,
+      "f1_best_threshold": 0.44310375457107604
+    }
+  },
+  "unweighted_diagnostic": {
+    "note": "Winning configuration refitted with class_weight=None; ranking versus calibration trade-off.",
+    "validation": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "roc_auc": 0.5876451453239456,
+      "roc_auc_baseline": 0.5,
+      "pr_auc": 0.19481283918364845,
+      "pr_auc_baseline": 0.15139551964744766,
+      "brier_score": 0.12707565147472374,
+      "log_loss": 0.4195505830386046,
+      "f1_at_0.5": 0.0,
+      "f1_best": 0.28592558880418706,
+      "f1_best_threshold": 0.137510501177774
+    }
+  },
+  "comparison": {
+    "validation_pr_auc_interval": {
+      "pr_auc": 0.19437018232756667,
+      "ci_low": 0.18503354936484293,
+      "ci_high": 0.2043177659301901,
+      "resamples": 1000,
+      "confidence": 0.95
+    },
+    "tuned_minus_week1_pr_auc": {
+      "observed_delta": 0.00982087871155557,
+      "mean_delta": 0.009808797140851987,
+      "ci_low": 0.005492799541032768,
+      "ci_high": 0.014064468733483474,
+      "share_favouring_a": 1.0,
+      "resamples": 1000,
+      "confidence": 0.95
+    }
+  },
+  "outputs": {
+    "train_parquet": "data/nlp/tfidf_oof_train.parquet",
+    "validation_parquet": "data/nlp/tfidf_oof_validate.parquet"
+  },
+  "environment": {
+    "python": "3.13.3",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1"
+  }
+}
