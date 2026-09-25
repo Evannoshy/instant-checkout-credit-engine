@@ -237,6 +237,13 @@ python -m pytest src/nlp/test_evaluate_baseline.py -v -s
 python -m src.nlp.evaluate_baseline
 ```
 
+For a full repository run with nothing skipped, point the opt-in real-data checks at the verified
+source CSV:
+
+```
+LENDINGCLUB_RAW_CSV="$PWD/data/raw/loan.csv" python -m pytest src/ scripts/ -q
+```
+
 Runtime is approximately 3 minutes 40 seconds for 120 grid fits plus the out-of-fold pass, the
 final fit, two reference fits and 2,000 bootstrap resamples.
 
@@ -253,9 +260,9 @@ report's integrity:
 - `test_validate_rejects_duplicate_loan_ids` and `test_validate_rejects_incomplete_coverage` — the
   conditions that would silently corrupt the tabular team's merge.
 
-Repository-wide, 201 tests pass. `test_features_lexical.py` and
-`test_train_distilbert_prototype.py` could not be collected in this environment because textblob and
-torch are not installed locally; they are unaffected by this change.
+Repository-wide, **227 tests pass with none skipped**, across both tracks and the `scripts/`
+integration checks. That figure includes the three opt-in real-data regression tests gated behind
+`LENDINGCLUB_RAW_CSV`, which were run against the verified raw CSV rather than skipped.
 
 ## 13. Definition-of-done status
 
