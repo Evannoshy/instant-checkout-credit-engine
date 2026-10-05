@@ -9,6 +9,7 @@ download, so every test runs offline in seconds.
 
 import dataclasses
 import json
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -120,6 +121,25 @@ def test_compute_metrics_scores_the_positive_class_probability():
     metrics = proto.compute_metrics(EvalPrediction(predictions=logits, label_ids=labels))
     assert metrics["roc_auc"] == 1.0
     assert metrics["pr_auc"] == 1.0
+
+
+def test_class_weights_follow_the_default_rate():
+    """At a 15.2% default rate, class weights are [1.0, 848/152]."""
+    weights = proto.class_weights(pd.Series([1] * 152 + [0] * 848))
+    assert weights.tolist() == pytest.approx([1.0, 848 / 152])
+
+
+def test_weighted_trainer_penalises_a_missed_default_more_than_a_false_alarm(tiny_model, tokenizer, loans, tmp_path):
+    """An equally wrong missed default gets N_non-default / N_default times a false alarm's gradient."""
+    ds = LoanTextDataset(loans, tokenizer)  # 20% defaults -> weight 64 / 16 = 4
+    assert type(proto.build_trainer(proto.PROTOTYPE, tiny_model(), tokenizer, ds, ds, tmp_path)) is Trainer
+    trainer = proto.build_trainer(proto.PROTOTYPE, tiny_model(), tokenizer, ds, ds, tmp_path, class_weighted=True)
+    assert isinstance(trainer, proto.WeightedTrainer)
+
+    logits = torch.tensor([[2.0, -2.0], [-2.0, 2.0]], requires_grad=True)
+    trainer.compute_loss(lambda **_: SimpleNamespace(logits=logits), {"labels": torch.tensor([1, 0])}).backward()
+    missed_default, false_alarm = logits.grad.abs().sum(dim=1)
+    assert (missed_default / false_alarm).item() == pytest.approx(4.0)
 
 
 @pytest.mark.parametrize(("cuda", "native_bf16", "expected"), [

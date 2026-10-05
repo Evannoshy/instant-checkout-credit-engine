@@ -92,6 +92,41 @@ def compute_metrics(eval_pred: EvalPrediction) -> dict[str, Any]:
     return evaluate(labels, scores)
 
 
+def class_weights(targets: pd.Series) -> torch.Tensor:
+    """Loss weights [1.0, N_non-default / N_default]; ~[1.0, 5.58] at the 15.2% default rate."""
+    positives = int(targets.sum())
+    return torch.tensor([1.0, (len(targets) - positives) / positives])
+
+
+class WeightedTrainer(Trainer):
+    """Trainer with class-weighted cross-entropy, so a missed default costs more than a false alarm.
+
+    Unweighted, the 1k prototype predicted the base rate for every loan (F1@0.5 = 0.0).
+    eval_loss is weighted too, so it is not comparable with unweighted runs.
+    """
+
+    def __init__(self, *args: Any, class_weights: torch.Tensor, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.class_weights = class_weights
+        # compute_loss ignores num_items_in_batch, so Trainer must scale for gradient accumulation.
+        self.model_accepts_loss_kwargs = False
+
+    def compute_loss(
+        self,
+        model: torch.nn.Module,
+        inputs: dict[str, Any],
+        return_outputs: bool = False,
+        num_items_in_batch: torch.Tensor | int | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, Any]:
+        """Class-weighted cross-entropy for one batch."""
+        labels = inputs.pop("labels")  # pop: otherwise the model also computes an unweighted loss
+        outputs = model(**inputs)
+        loss = torch.nn.functional.cross_entropy(
+            outputs.logits, labels, weight=self.class_weights.to(outputs.logits.device)
+        )
+        return (loss, outputs) if return_outputs else loss
+
+
 def new_model() -> DistilBertForSequenceClassification:
     """Pretrained DistilBERT with a freshly initialised 2-class head."""
     # The new head starts with random weights; seed now so every run starts the same.
@@ -107,12 +142,14 @@ def build_trainer(
     train_ds: LoanTextDataset,
     eval_ds: LoanTextDataset | None,
     output_dir: Path,
+    class_weighted: bool = False,
 ) -> Trainer:
     """Build the Trainer both stages share (AdamW, batch size 16, seeded).
 
     Args:
         eval_ds: Evaluated after every epoch; None skips evaluation.
         output_dir: Trainer working directory; no mid-run checkpoints are written.
+        class_weighted: Return a WeightedTrainer weighted by train_ds labels.
     """
     mixed = precision()
     args = TrainingArguments(
@@ -133,7 +170,7 @@ def build_trainer(
         dataloader_pin_memory=torch.cuda.is_available(),
         seed=RANDOM_STATE,
     )
-    return Trainer(
+    common = dict(
         model=model,
         args=args,
         train_dataset=train_ds,
@@ -141,6 +178,9 @@ def build_trainer(
         processing_class=tokenizer,
         compute_metrics=compute_metrics,
     )
+    if class_weighted:
+        return WeightedTrainer(**common, class_weights=class_weights(train_ds.df["target"]))
+    return Trainer(**common)
 
 
 def overfit(train_df: pd.DataFrame, tokenizer: DistilBertTokenizerFast) -> None:
