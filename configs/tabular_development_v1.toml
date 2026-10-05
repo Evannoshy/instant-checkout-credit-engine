@@ -1,0 +1,28 @@
+development_version = "tabular_development_v1"
+status = "proposed"
+cohort_version = "real_text_matured_v1"
+split_version = "split-v1"
+source_split = "train"
+
+# Months are inclusive "YYYY-MM" issue months, matched against split_manifest.csv issue_month.
+[roles.model_fit]
+first_month = "2007-06"
+last_month = "2012-12"
+
+[roles.calibration]
+first_month = "2013-01"
+last_month = "2013-07"
+
+[expected.role_rows]
+model_fit = 59353
+calibration = 26940
+
+# Experimental input for the named lexical experiment only; not part of tabular_features_v1.
+# SHA 256 is used to verify that the parquet file has not changed since this config was written.
+[lexical]
+path = "data/nlp/text_lexical_features.parquet"
+sha256 = "9460d28ca91c946dd322df841865187b95ff3e7c0b9ffbb019bb83218f4955cb"
+columns = [
+  "flesch_reading_ease", "flesch_kincaid_grade", "lexical_diversity_ttr",
+  "sentiment_polarity", "sentiment_subjectivity", "financial_distress_keyword_density",
+]
