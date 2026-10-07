@@ -23,11 +23,12 @@ from src.tabular.development import (
     ERROR_MESSAGES,
     get_ablation_feature_sets,
     assign_development_roles,
+    join_lexical_features,
     load_ablation_config,
     load_development_config,
     load_tabular_role,
 )
-from src.tabular.preprocess import load_feature_config
+from src.tabular.preprocess import load_feature_config, load_tabular_split
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +52,10 @@ FIXTURE_TRAIN_ROLES = {
 }
 VALIDATION_ID = "lc_000000004"
 TEST_ID = "lc_000000002"
+MODEL_FIT_ID = "lc_000000005"
+UNKNOWN_ID = "lc_000000099"  # in no split of the fixture manifest
+# Every train and validation row of the fixture, with its manifest split.
+FIXTURE_LEXICAL_SPLITS = {**dict.fromkeys(FIXTURE_TRAIN_ROLES, "train"), VALIDATION_ID: "validation"}
 FIXTURE_COUNTS = [
     ("model_fit = 59353", "model_fit = 2"),
     ("calibration = 26940", "calibration = 2"),
@@ -370,3 +375,213 @@ def test_variants_are_independent_copies(feature_config: dict) -> None:
             variant["model"]["categorical"].clear()
     assert sets["all"]["model"] == before["model"]
     assert feature_config == before
+
+
+# --- Lexical join ---
+# The fixture parquet covers the four train rows and the validation row. Each
+# value encodes its loan and column (lc_000000005, column 2 -> 5.2), so a value
+# that lands on the wrong row is detectable. Every file a test writes gets its
+# own SHA-256 pin, so these tests reach the content checks, not the SHA check.
+
+
+def _lexical_columns() -> list[str]:
+    return load_development_config(DEVELOPMENT_CONFIG)["lexical"]["columns"]
+
+
+def _lexical_value(loan_id: str, column: int) -> float:
+    return int(loan_id.removeprefix("lc_")) + column / 10
+
+
+@pytest.fixture
+def lexical_table() -> pd.DataFrame:
+    """A valid lexical file for the fixture's train and validation rows."""
+    table = pd.DataFrame({
+        "loan_id": list(FIXTURE_LEXICAL_SPLITS),
+        "split": list(FIXTURE_LEXICAL_SPLITS.values()),
+    })
+    for column, name in enumerate(_lexical_columns()):
+        table[name] = [_lexical_value(loan_id, column) for loan_id in table["loan_id"]]
+    return table
+
+
+def _write_lexical_config(tmp_path: Path, table: pd.DataFrame) -> Path:
+    """Write the table as parquet and a fixture development config pinned to it."""
+    lexical = load_development_config(DEVELOPMENT_CONFIG)["lexical"]
+    path = tmp_path / "lexical.parquet"
+    table.to_parquet(path, engine="pyarrow", index=False)
+    sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    return _write_development_config(
+        tmp_path,
+        "lexical_development.toml",
+        [
+            *FIXTURE_COUNTS,
+            (f'path = "{lexical["path"]}"', f'path = "{path.as_posix()}"'),
+            (f'sha256 = "{lexical["sha256"]}"', f'sha256 = "{sha256}"'),
+        ],
+    )
+
+
+def test_lexical_file_changed_after_pinning_is_rejected(
+    artificial_data_dir: Path, tmp_path: Path, lexical_table: pd.DataFrame
+) -> None:
+    """A lexical file rewritten after its SHA-256 was pinned stops the join, even if otherwise valid."""
+    config = _write_lexical_config(tmp_path, lexical_table)
+    regenerated = lexical_table.copy()
+    regenerated[_lexical_columns()[0]] += 1.0
+    regenerated.to_parquet(
+        load_development_config(config)["lexical"]["path"], engine="pyarrow", index=False,
+    )
+    features, target = _load_role(artificial_data_dir, "model_fit", config)
+    with pytest.raises(ValueError, match=error_pattern("lexical_sha_mismatch")):
+        join_lexical_features(features, target, artificial_data_dir, config)
+
+
+def test_duplicate_loan_ids_are_rejected(
+    artificial_data_dir: Path, tmp_path: Path, lexical_table: pd.DataFrame
+) -> None:
+    """A loan_id repeated in the lexical file or in the requested rows stops the join."""
+    repeated_in_file = pd.concat([lexical_table, lexical_table.iloc[[0]]], ignore_index=True)
+    config = _write_lexical_config(tmp_path, repeated_in_file)
+    features, target = _load_role(artificial_data_dir, "model_fit", config)
+    with pytest.raises(ValueError, match=error_pattern("lexical_bad_ids")):
+        join_lexical_features(features, target, artificial_data_dir, config)
+
+    config = _write_lexical_config(tmp_path, lexical_table)
+    rows = [0, 0, 1]
+    with pytest.raises(ValueError, match=error_pattern("lexical_input_not_unique")):
+        join_lexical_features(
+            features.iloc[rows], target.iloc[rows], artificial_data_dir, config,
+        )
+
+
+@pytest.mark.parametrize(
+    ("split", "error_key"),
+    [("validation", "lexical_split_mismatch"), ("holdout", "lexical_bad_splits")],
+)
+def test_file_split_must_match_the_manifest(
+    artificial_data_dir: Path,
+    tmp_path: Path,
+    lexical_table: pd.DataFrame,
+    split: str,
+    error_key: str,
+) -> None:
+    """A train loan the file labels validation, or a split outside train/validation, stops the join."""
+    table = lexical_table.copy()
+    table.loc[table["loan_id"].eq(MODEL_FIT_ID), "split"] = split
+    config = _write_lexical_config(tmp_path, table)
+    features, target = _load_role(artificial_data_dir, "model_fit", config)
+    with pytest.raises(ValueError, match=error_pattern(error_key)):
+        join_lexical_features(features, target, artificial_data_dir, config)
+
+
+@pytest.mark.parametrize(
+    ("loan_id", "error_key"),
+    [(TEST_ID, "lexical_test_ids"), (UNKNOWN_ID, "lexical_ids_not_in_manifest")],
+)
+def test_unexpected_ids_in_the_file_are_rejected(
+    artificial_data_dir: Path,
+    tmp_path: Path,
+    lexical_table: pd.DataFrame,
+    loan_id: str,
+    error_key: str,
+) -> None:
+    """A locked test ID or an ID absent from the manifest anywhere in the file stops the join."""
+    extra = lexical_table.iloc[[0]].assign(loan_id=loan_id)
+    config = _write_lexical_config(tmp_path, pd.concat([lexical_table, extra], ignore_index=True))
+    features, target = _load_role(artificial_data_dir, "model_fit", config)
+    with pytest.raises(ValueError, match=error_pattern(error_key)):
+        join_lexical_features(features, target, artificial_data_dir, config)
+
+
+def test_join_adds_no_rows_for_other_loans_in_the_file(
+    artificial_data_dir: Path, tmp_path: Path, lexical_table: pd.DataFrame
+) -> None:
+    """The file also covers other loans; the output holds exactly the requested rows."""
+    config = _write_lexical_config(tmp_path, lexical_table)
+    features, target = _load_role(artificial_data_dir, "model_fit", config)
+    joined, _ = join_lexical_features(features, target, artificial_data_dir, config)
+    assert len(lexical_table) > len(features)
+    assert joined.index.equals(features.index)
+
+
+def test_requested_loan_absent_from_the_file_is_rejected(
+    artificial_data_dir: Path, tmp_path: Path, lexical_table: pd.DataFrame
+) -> None:
+    """A requested loan with no row in the lexical file stops the join."""
+    table = lexical_table.loc[lexical_table["loan_id"].ne(MODEL_FIT_ID)]
+    config = _write_lexical_config(tmp_path, table)
+    features, target = _load_role(artificial_data_dir, "model_fit", config)
+    assert MODEL_FIT_ID in features.index
+    with pytest.raises(ValueError, match=error_pattern("lexical_ids_missing")):
+        join_lexical_features(features, target, artificial_data_dir, config)
+
+
+def test_missing_lexical_value_is_rejected(
+    artificial_data_dir: Path, tmp_path: Path, lexical_table: pd.DataFrame
+) -> None:
+    """A requested loan whose lexical value is missing stops the join."""
+    table = lexical_table.copy()
+    table.loc[table["loan_id"].eq(MODEL_FIT_ID), _lexical_columns()[-1]] = float("nan")
+    config = _write_lexical_config(tmp_path, table)
+    features, target = _load_role(artificial_data_dir, "model_fit", config)
+    with pytest.raises(ValueError, match=error_pattern("lexical_missing_values")):
+        join_lexical_features(features, target, artificial_data_dir, config)
+
+
+@pytest.mark.parametrize("rows", ["model_fit", "calibration", "validation"])
+def test_rows_and_target_stay_aligned_when_the_file_is_shuffled(
+    artificial_data_dir: Path, tmp_path: Path, lexical_table: pd.DataFrame, rows: str
+) -> None:
+    """With the file reversed, each row gets its own loan's values; index, features and target are unchanged."""
+    config = _write_lexical_config(tmp_path, lexical_table.iloc[::-1])
+    if rows == "validation":
+        features, target = load_tabular_split(
+            artificial_data_dir, artificial_data_dir / "raw" / "loan.csv", "validation",
+            FEATURE_CONFIG,
+        )
+    else:
+        features, target = _load_role(artificial_data_dir, rows, config)
+    joined, joined_target = join_lexical_features(features, target, artificial_data_dir, config)
+
+    columns = _lexical_columns()
+    assert list(joined.columns) == [*features.columns, *columns]
+    assert joined.index.equals(features.index)
+    assert_frame_equal(joined[features.columns], features)
+    assert_series_equal(joined_target, target)
+    assert joined_target.index.equals(joined.index)
+    expected = pd.DataFrame(
+        {
+            name: [_lexical_value(loan_id, column) for loan_id in features.index]
+            for column, name in enumerate(columns)
+        },
+        index=features.index,
+    )
+    assert_frame_equal(joined[columns], expected)
+
+
+@pytest.mark.skipif(
+    not os.getenv("LENDINGCLUB_RAW_CSV"),
+    reason="Set LENDINGCLUB_RAW_CSV to run the locked real-data regression check.",
+)
+def test_real_lexical_join_on_train_and_validation() -> None:
+    """The pinned real file joins onto all 86,293 train and 21,784 validation rows with zero NaN."""
+    raw_csv_path = Path(os.environ["LENDINGCLUB_RAW_CSV"])
+    columns = _lexical_columns()
+    for split, expected_rows in (("train", 86_293), ("validation", 21_784)):
+        features, target = load_tabular_split(REAL_DATA_DIR, raw_csv_path, split)
+        joined, joined_target = join_lexical_features(features, target, REAL_DATA_DIR)
+        assert len(joined) == expected_rows, split
+        assert joined.index.equals(features.index), split
+        assert list(joined.columns) == [*features.columns, *columns], split
+        assert int(joined[columns].isna().sum().sum()) == 0, split
+        assert joined_target.index.equals(joined.index), split
+
+
+def test_misaligned_features_and_target_are_rejected(
+    artificial_data_dir: Path, tmp_path: Path, lexical_table: pd.DataFrame
+) -> None:
+    """Features and target whose rows are in different orders stop the join."""
+    config = _write_lexical_config(tmp_path, lexical_table)
+    features, target = _load_role(artificial_data_dir, "model_fit", config)
+    with pytest.raises(ValueError, match=error_pattern("output_not_aligned")):
+        join_lexical_features(features, target.iloc[::-1], artificial_data_dir, config)

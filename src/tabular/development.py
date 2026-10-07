@@ -11,7 +11,8 @@ and is never used to fit anything; ``test`` is rejected before any file is opene
 Contract for the model pipelines (XGBoost search, logistic refit, ablations):
 - ``features`` and ``target`` follow the ``load_tabular_split`` contract exactly
   (indexed and sorted by ``loan_id``, configured columns and dtypes), restricted
-  to the role's rows. Only rows change; no feature is added or transformed here.
+  to the role's rows. Only rows change; the role loader adds or transforms no
+  feature (``join_lexical_features`` is a separate, opt-in step).
 - Fit on ``model_fit`` rows only. Never fit on ``load_tabular_split(..., "train")``:
   it returns all train rows, calibration included, and nothing in code blocks it.
 - ``assign_development_roles(data_dir)`` gives ``loan_id -> issue_month, role``
@@ -33,6 +34,17 @@ validates the families against the feature config, and ``ablation_feature_sets``
 returns feature-config-shaped dicts ("all" and one "without_<family>" per family)
 for ``build_pipeline``. They change column lists only; no data is read.
 
+Lexical join (experimental input, not part of tabular_features_v1):
+``join_lexical_features(features, target)`` appends the six NLP-track lexical
+columns listed in ``[lexical]`` of the development config, from the parquet
+whose SHA-256 is pinned there. It works on any loaded frame (a role or the
+validation split) and never opens the raw CSV. Each value is computed by
+src/nlp/features_lexical.py from one loan's own text with fixed rules
+(readability formulas, a fixed keyword list, TextBlob's fixed lexicon);
+nothing is fitted across loans, so the join adds no cross-row leakage. Use it
+only in the named lexical experiment (nine features vs nine + six); if a
+recommended model needs these columns, that is a new feature-set version.
+
 Known limitations:
 - Every ``load_tabular_role`` call scans the full raw CSV through
   ``load_tabular_split``, so loading both roles scans it twice. There is no cache.
@@ -41,12 +53,20 @@ Known limitations:
   same config.
 - ``ablation_feature_sets`` assumes the consuming ColumnTransformer uses
   ``remainder="drop"``; nothing here checks it (see that function's docstring).
+- Empty text gives 0.0 for every lexical feature (features_lexical.py), so 0.0
+  can mean "no text" as well as a real zero.
+- The parquet's SHA-256 pin is versioned with the role boundaries: if the NLP
+  track regenerates the file, the development config needs a new version even
+  though no role changed.
+- Under D-014 text reaches fusion through NLP probabilities; a tabular model
+  with lexical columns would bring the same text signal into fusion twice.
 """
 
 from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import re
 import tomllib
@@ -83,6 +103,8 @@ REQUIRED_DEVELOPMENT_CONFIG_KEYS = {
     "roles", "expected",
 }
 REQUIRED_ABLATION_CONFIG_KEYS = {"ablation_version", "feature_set_version", "status", "families"}
+REQUIRED_LEXICAL_KEYS = {"path", "sha256", "columns"}
+LEXICAL_KEY_COLUMNS = ("loan_id", "split")
 
 # Every ValueError message raised by this module, as str.format templates.
 # Placeholders are filled at the raise site; messages with none are used as-is.
@@ -137,6 +159,32 @@ ERROR_MESSAGES: dict[str, str] = {
     "ablation_unknown_features": "Family {family!r} lists features that are not model features: {unknown}",
     "ablation_duplicate_features": "Features listed in more than one family (or twice): {duplicates}",
     "ablation_unassigned_features": "Model features in no family: {missing}",
+    # Lexical join (join_lexical_features)
+    "lexical_missing_section": "Development config has no [lexical] section",
+    "lexical_missing_keys": "[lexical] is missing keys: {missing}",
+    "lexical_bad_columns": "[lexical] columns must be a non-empty list of unique names; got {columns!r}",
+    "lexical_input_not_unique": "Feature index must hold unique loan_id values; {count} are duplicated",
+    "lexical_columns_present": "Features already contain lexical columns: {columns}",
+    "lexical_sha_mismatch": (
+        "Lexical file {path} has SHA-256 {actual}, but the development config pins {expected}"
+    ),
+    "lexical_wrong_columns": "Lexical file columns {actual} differ from the expected {expected}",
+    "lexical_bad_ids": (
+        "Lexical file loan_id values must be present and unique; "
+        "{missing} missing, {duplicated} duplicated"
+    ),
+    "lexical_bad_splits": "Lexical file split values must be in {allowed}; got {actual}",
+    "lexical_test_ids": "Lexical file contains {count} locked test IDs, e.g. {sample}",
+    "lexical_ids_not_in_manifest": (
+        "Lexical file has {count} IDs that are not train or validation rows in the manifest, "
+        "e.g. {sample}"
+    ),
+    "lexical_split_mismatch": "Lexical file split disagrees with the manifest for {count} IDs, e.g. {sample}",
+    "lexical_ids_missing": "{count} requested loans are not in the lexical file, e.g. {sample}",
+    "lexical_join_changed_rows": "Lexical join returned {actual} rows for {expected} requested",
+    "lexical_missing_values": (
+        "Lexical columns have missing values after the join for {count} loans, e.g. {sample}"
+    ),
 }
 
 
@@ -421,6 +469,131 @@ def get_ablation_feature_sets(
             ]
         sets[f"without_{family}"] = variant
     return sets
+
+
+def _lexical_settings(config: dict[str, Any]) -> dict[str, Any]:
+    """Return the [lexical] section, requiring a path, a SHA-256 pin and unique column names."""
+    settings = config.get("lexical")
+    if settings is None:
+        raise ValueError(ERROR_MESSAGES["lexical_missing_section"])
+    if missing := REQUIRED_LEXICAL_KEYS - set(settings):
+        raise ValueError(ERROR_MESSAGES["lexical_missing_keys"].format(missing=sorted(missing)))
+    columns = settings["columns"]
+    if (
+        not isinstance(columns, list)
+        or not columns
+        or not all(isinstance(name, str) and name for name in columns)
+        or len(set(columns)) != len(columns)
+        or set(columns) & set(LEXICAL_KEY_COLUMNS)
+    ):
+        raise ValueError(ERROR_MESSAGES["lexical_bad_columns"].format(columns=columns))
+    return settings
+
+
+def _load_lexical_table(settings: dict[str, Any], data_dir: str | Path) -> pd.DataFrame:
+    """Read the lexical parquet and check identity, shape and splits; return it indexed by loan_id.
+
+    The checks run in order: SHA-256 against the pin, exact columns, unique
+    present loan_ids, train/validation split values only, no ID from
+    test_ids.csv (an ID-set check; no test data is read), and every ID's split
+    equal to the manifest's.
+    """
+    path = Path(settings["path"])
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    with path.open("rb") as stream:
+        actual_sha = hashlib.file_digest(stream, "sha256").hexdigest()
+    if actual_sha != settings["sha256"]:
+        raise ValueError(ERROR_MESSAGES["lexical_sha_mismatch"].format(
+            path=path, actual=actual_sha, expected=settings["sha256"],
+        ))
+
+    table = pd.read_parquet(path, engine="pyarrow")
+    expected_columns = [*LEXICAL_KEY_COLUMNS, *settings["columns"]]
+    if sorted(table.columns) != sorted(expected_columns):
+        raise ValueError(ERROR_MESSAGES["lexical_wrong_columns"].format(
+            actual=list(table.columns), expected=expected_columns,
+        ))
+    missing_ids = int(table["loan_id"].isna().sum())
+    duplicated_ids = int(table["loan_id"].duplicated().sum())
+    if missing_ids or duplicated_ids:
+        raise ValueError(ERROR_MESSAGES["lexical_bad_ids"].format(
+            missing=missing_ids, duplicated=duplicated_ids,
+        ))
+    if not table["split"].isin(LOADABLE_SPLITS).all():
+        raise ValueError(ERROR_MESSAGES["lexical_bad_splits"].format(
+            allowed=list(LOADABLE_SPLITS), actual=sorted(table["split"].dropna().unique().tolist()),
+        ))
+    table = table.astype({"loan_id": str}).set_index("loan_id")  # same index dtype as load_tabular_split
+
+    test_ids = pd.read_csv(Path(data_dir) / "test_ids.csv", usecols=["loan_id"], dtype={"loan_id": str})
+    if (in_test := table.index.isin(test_ids["loan_id"])).any():
+        raise ValueError(ERROR_MESSAGES["lexical_test_ids"].format(
+            count=int(in_test.sum()), sample=table.index[in_test][:5].tolist(),
+        ))
+
+    manifest, _ = load_manifest(data_dir)  # train and validation rows only
+    manifest_split = manifest.astype({"loan_id": str}).set_index("loan_id")["split"]
+    if (unknown := ~table.index.isin(manifest_split.index)).any():
+        raise ValueError(ERROR_MESSAGES["lexical_ids_not_in_manifest"].format(
+            count=int(unknown.sum()), sample=table.index[unknown][:5].tolist(),
+        ))
+    disagrees = table["split"].ne(manifest_split.reindex(table.index))
+    if disagrees.any():
+        raise ValueError(ERROR_MESSAGES["lexical_split_mismatch"].format(
+            count=int(disagrees.sum()), sample=table.index[disagrees][:5].tolist(),
+        ))
+    return table[settings["columns"]]
+
+
+def join_lexical_features(
+    features: pd.DataFrame,
+    target: pd.Series,
+    data_dir: str | Path = DEFAULT_DATA_DIR,
+    development_config: str | Path = DEFAULT_DEVELOPMENT_CONFIG,
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Append the [lexical] columns to already-loaded features, joined on loan_id.
+
+    Experimental input for the named lexical experiment only; the columns are
+    not part of tabular_features_v1. Takes ``(features, target)`` from
+    ``load_tabular_role`` or ``load_tabular_split`` and never opens the raw CSV:
+    it reads only the pinned parquet, the manifest and test_ids.csv. Returns the
+    original columns followed by the lexical columns in config order, with the
+    same index in the same order; ``target`` is returned unchanged.
+    Raises ValueError for unaligned or duplicated input rows, input that
+    already holds a lexical column, a missing or malformed [lexical] section,
+    any check in ``_load_lexical_table``, a requested loan absent from the
+    file, a join that changes the row count, or a missing lexical value.
+    """
+    if not features.index.equals(target.index):
+        raise ValueError(ERROR_MESSAGES["output_not_aligned"])
+    if features.index.has_duplicates:
+        raise ValueError(ERROR_MESSAGES["lexical_input_not_unique"].format(
+            count=int(features.index.duplicated().sum()),
+        ))
+    settings = _lexical_settings(load_development_config(development_config))
+    columns = settings["columns"]
+    if present := [name for name in columns if name in features.columns]:
+        raise ValueError(ERROR_MESSAGES["lexical_columns_present"].format(columns=present))
+
+    lexical = _load_lexical_table(settings, data_dir)
+    if (absent := ~features.index.isin(lexical.index)).any():
+        raise ValueError(ERROR_MESSAGES["lexical_ids_missing"].format(
+            count=int(absent.sum()), sample=features.index[absent][:5].tolist(),
+        ))
+
+    joined = features.join(lexical, how="left", validate="one_to_one")
+    if len(joined) != len(features):
+        raise ValueError(ERROR_MESSAGES["lexical_join_changed_rows"].format(
+            actual=len(joined), expected=len(features),
+        ))
+    if (has_missing := joined[columns].isna().any(axis="columns")).any():
+        raise ValueError(ERROR_MESSAGES["lexical_missing_values"].format(
+            count=int(has_missing.sum()), sample=joined.index[has_missing][:5].tolist(),
+        ))
+    if not (joined.index.equals(features.index) and joined.index.equals(target.index)):
+        raise ValueError(ERROR_MESSAGES["output_not_aligned"])
+    return joined, target
 
 
 def profile_roles(roles: pd.DataFrame, manifest: pd.DataFrame) -> dict[str, Any]:
