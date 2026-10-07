@@ -116,7 +116,7 @@ RELIABILITY_BINS = 10
 
 
 def load_winning_params(metrics_path: str | Path = DEFAULT_TUNING_METRICS) -> dict[str, Any]:
-    """Read the selected hyperparameters recorded by the Week 2 tuning run."""
+    """Read the selected hyperparameters recorded by the `nlp-tfidf-tuned-v1` run."""
     with Path(metrics_path).open(encoding="utf-8") as stream:
         metrics = json.load(stream)
     selection = metrics["selection"]["best_params"]

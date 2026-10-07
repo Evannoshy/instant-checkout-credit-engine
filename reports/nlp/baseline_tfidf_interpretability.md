@@ -11,7 +11,7 @@
 
 ## 1. Purpose
 
-This report diagnoses the tuned TF-IDF model shipped in Week 2. It answers what the model has
+This report diagnoses the tuned TF-IDF model `nlp-tfidf-tuned-v1`. It answers what the model has
 learned, whether its probabilities can be made honest, and what it costs to use at any operating
 threshold. **It changes no shipped artefact**: `data/nlp/tfidf_oof_*.parquet` and
 `nlp-tfidf-tuned-v1` are unmodified.
@@ -89,15 +89,15 @@ Coefficients are descriptive associations. Their magnitudes depend on IDF scalin
 correlated n-grams, so they identify neither risk drivers nor causes — the same boundary the project
 applies to SHAP under D-009.
 
-### 2.4 Rankings are materially cleaner than Week 1
+### 2.4 Rankings are materially cleaner than the untuned baseline
 
-| | Week 1 (`C=1.0`, 5k, `sublinear_tf=False`) | Week 3 (`C=0.1`, 10k, `sublinear_tf=True`) |
+| | `nlp-baseline-tfidf-v1` (`C=1.0`, 5k, `sublinear_tf=False`) | `nlp-tfidf-tuned-v1` (`C=0.1`, 10k, `sublinear_tf=True`) |
 |---|---:|---:|
 | Ranked terms under 1% document frequency | 38 of 40 (95%) | 27 of 60 (45%) |
 | Median document frequency of ranked terms | 0.181% | 1.246% |
 
 Quadrupling the regularisation raised the median document frequency behind a ranked term **6.9x**.
-The Week 1 report recommended a `min_df` filter to fix this (NB-02); stronger regularisation
+`docs/nlp-baseline-report.md` recommended a `min_df` filter to fix this (NB-02); stronger regularisation
 achieved it without one.
 
 ### 2.5 Two interpretability findings
@@ -106,7 +106,7 @@ achieved it without one.
 `improvement home` and `debts debt` are reversals of `major purchase`, `credit card`,
 `home improvement` and `debt`/`debts` — produced where the `purpose` category repeats the title
 across the payload join. `purchase major` occurs in 492 payload documents but inside a single field
-in only 9. See NI-05: the Week 1 ablation already showed title and purpose contribute 0.0004 PR-AUC,
+in only 9. See NI-05: the baseline report's ablation already showed title and purpose contribute 0.0004 PR-AUC,
 so dropping them from the TF-IDF input would remove this entire artefact class at no measurable cost.
 
 **`late payment` ranks as protective** (−0.744, 1.54% of documents), which is not a sensible risk
@@ -167,13 +167,13 @@ against the tabular track's role split, which exists for reasons beyond text cal
 
 `tabular-logistic-v1` uses `class_weight='balanced'` and reports Brier 0.23214 and log loss 0.65770,
 both worse than a constant prediction (0.12848 / 0.42513). This report shows the mechanism is the
-probability scale rather than the model, and that it is fully recoverable. Week 2 raised this as
-NT-01; §3 is the measured confirmation.
+probability scale rather than the model, and that it is fully recoverable. `docs/nlp-tuning-report.md`
+raised this as NT-01; §3 is the measured confirmation.
 
 ## 5. Threshold trade-offs
 
-Swept on the shipped uncalibrated probabilities, so the figures are comparable with the Week 2
-report. Full table: `reports/nlp/tfidf_threshold_sweep.csv`.
+Swept on the shipped uncalibrated probabilities, so the figures are comparable with
+`docs/nlp-tuning-report.md`. Full table: `reports/nlp/tfidf_threshold_sweep.csv`.
 
 | Threshold | TP | FP | Precision | Recall | F1 | FP per TP | Share of applicants flagged |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -214,8 +214,8 @@ policy-layer decision under D-007; nothing here recommends one.
 | NI-01 | Calibration fully recovers the Brier score, but `class_weight=None` alone matches every calibrated route (0.12708 against a 0.12723–0.12743 spread) with no extra component. The spread is too small to rank | High | Drop balanced weighting in the next text model version rather than adding a calibrator. Recommendation rests on simplicity, not measured superiority | NLP lead |
 | NI-02 | Platt preserves ranking exactly (ROC-AUC identical to six decimals); isotonic ties scores and costs 0.0030 PR-AUC for the same Brier | Medium | If a calibrator is wanted despite NI-01, use Platt. Do not use isotonic here | NLP lead |
 | NI-03 | The chronological calibration-role variant costs 0.0045 ROC-AUC (27k fewer training rows) and does not improve calibrated Brier | Medium | For the text model, calibrate on the already-exported OOF probabilities. Not an argument against the tabular role split | NLP + Tabular leads |
-| NI-04 | `C=0.1` raised the median document frequency behind a ranked term 6.9x versus Week 1 (0.181% to 1.246%), and cut sub-1% terms from 95% to 45% | Medium | Week 1's NB-02 `min_df` recommendation can be closed: regularisation addressed it | Analyst 2 |
-| NI-05 | Four of the top 30 higher-risk terms are payload-join artefacts, all caused by `purpose` repeating the title. The Week 1 ablation measured title and purpose as worth 0.0004 PR-AUC | Medium | Drop title and purpose from the TF-IDF input, or vectorise fields separately. Removes the whole artefact class at no measurable cost | Analyst 2 |
+| NI-04 | `C=0.1` raised the median document frequency behind a ranked term 6.9x versus the untuned baseline (0.181% to 1.246%), and cut sub-1% terms from 95% to 45% | Medium | The baseline report's NB-02 `min_df` recommendation can be closed: regularisation addressed it | Analyst 2 |
+| NI-05 | Four of the top 30 higher-risk terms are payload-join artefacts, all caused by `purpose` repeating the title. The baseline report's ablation measured title and purpose as worth 0.0004 PR-AUC | Medium | Drop title and purpose from the TF-IDF input, or vectorise fields separately. Removes the whole artefact class at no measurable cost | Analyst 2 |
 | NI-06 | `late payment` ranks as protective, almost certainly negation ("never had a late payment"). Bag-of-ngrams cannot represent negation, which preprocessing deliberately preserves | Medium | Treat as a known ceiling of the lexical approach and a concrete argument for the transformer track, which can model it | NLP lead |
 | NI-07 | No usable standalone threshold. Precision peaks at 0.2215 against a 0.1514 base rate; 70% recall requires flagging 59.3% of applicants | High | Confirms the model's role as a fusion input only. No operating threshold should be quoted from this model alone | Fusion lead + co-leads |
 

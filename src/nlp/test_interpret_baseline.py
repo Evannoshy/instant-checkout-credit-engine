@@ -71,11 +71,11 @@ def payload_rows() -> pd.DataFrame:
     )
 
 
-# --- ingesting the Week 2 result ---------------------------------------------
+# --- ingesting the tuning result ---------------------------------------------
 
 
 def test_winning_params_are_read_from_the_recorded_tuning_run(tmp_path):
-    """Hyperparameters are ingested from the Week 2 metrics, not hardcoded here."""
+    """Hyperparameters are ingested from the recorded tuning metrics, not hardcoded here."""
     path = tmp_path / "metrics.json"
     path.write_text(
         json.dumps(
@@ -168,7 +168,7 @@ def test_volatility_attributes_counts_to_the_right_term():
     assert result.loc["alpha", "volatility_ratio"] == pytest.approx(1.0)
 
 
-def test_flag_thresholds_match_the_week_one_findings():
+def test_flag_thresholds_match_the_baseline_report_findings():
     """The documented artefact criteria are the ones applied, not ad hoc values."""
     assert DOCUMENT_FREQUENCY_FLOOR_PERCENT == 1.0
     assert VOLATILITY_THRESHOLD == 10.0
