@@ -8,6 +8,7 @@ The -s flag shows print statements; -v shows each PASSED/FAILED result.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -20,15 +21,19 @@ from pandas.testing import assert_frame_equal, assert_series_equal
 
 from src.tabular.development import (
     ERROR_MESSAGES,
+    get_ablation_feature_sets,
     assign_development_roles,
+    load_ablation_config,
     load_development_config,
     load_tabular_role,
 )
+from src.tabular.preprocess import load_feature_config
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 FEATURE_CONFIG = REPOSITORY_ROOT / "configs" / "tabular_features_v1.toml"
 DEVELOPMENT_CONFIG = REPOSITORY_ROOT / "configs" / "tabular_development_v1.toml"
+ABLATION_CONFIG = REPOSITORY_ROOT / "configs" / "tabular_ablation_v1.toml"
 REAL_DATA_DIR = REPOSITORY_ROOT / "data"
 
 # Hardcoded on purpose, so a silent edit to the config's boundaries fails a test
@@ -302,3 +307,66 @@ def test_real_role_sizes_and_union() -> None:
     assert len(model_fit) == 59_353
     assert len(calibration) == 26_940
     assert len(set(model_fit.index) | set(calibration.index)) == 86_293
+
+
+# --- Ablation families ---
+# Families and columns are read from the configs, not hardcoded, so these tests
+# keep working when features or families are added.
+
+
+@pytest.fixture
+def feature_config() -> dict:
+    return load_feature_config(FEATURE_CONFIG)
+
+
+def _families(feature_config: dict) -> dict[str, list[str]]:
+    config = load_ablation_config(ABLATION_CONFIG, feature_config)
+    return {name: spec["features"] for name, spec in config["families"].items()}
+
+
+def _feature_sets(feature_config: dict) -> dict[str, dict]:
+    return get_ablation_feature_sets(
+        feature_config, load_ablation_config(ABLATION_CONFIG, feature_config)
+    )
+
+
+def _model_features(config: dict) -> list[str]:
+    return [*config["model"]["numeric"], *config["model"]["categorical"]]
+
+
+def test_every_model_feature_is_in_exactly_one_family(feature_config: dict) -> None:
+    """The families list every model feature exactly once and nothing else."""
+    listed = [name for features in _families(feature_config).values() for name in features]
+    assert len(listed) == len(set(listed))
+    assert set(listed) == set(_model_features(feature_config))
+
+
+def test_all_set_equals_the_model_features(feature_config: dict) -> None:
+    """The "all" variant keeps the feature config's lists; one without_ set follows per family."""
+    sets = _feature_sets(feature_config)
+    assert sets["all"]["model"] == feature_config["model"]
+    assert list(sets) == ["all", *(f"without_{name}" for name in _families(feature_config))]
+
+
+def test_each_without_set_removes_exactly_its_family_in_config_order(feature_config: dict) -> None:
+    """Each without_<family> keeps every other model feature, in the original order per list."""
+    sets = _feature_sets(feature_config)
+    for family, removed in _families(feature_config).items():
+        model = sets[f"without_{family}"]["model"]
+        for kind in ("numeric", "categorical"):
+            expected = [name for name in feature_config["model"][kind] if name not in removed]
+            assert model[kind] == expected, family
+
+
+def test_variants_are_independent_copies(feature_config: dict) -> None:
+    """Building variants leaves the feature config intact; editing one variant changes no other."""
+    before = copy.deepcopy(feature_config)
+    sets = _feature_sets(feature_config)
+    assert feature_config == before
+
+    for name, variant in sets.items():
+        if name != "all":
+            variant["model"]["numeric"].clear()
+            variant["model"]["categorical"].clear()
+    assert sets["all"]["model"] == before["model"]
+    assert feature_config == before
