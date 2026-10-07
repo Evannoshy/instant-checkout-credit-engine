@@ -27,17 +27,26 @@ Run from the repository root to print each role's counts from the manifest
 (no raw CSV needed):
     python -m src.tabular.development
 
+Ablation families (``configs/tabular_ablation_v1.toml``) group the nine model
+features so one family can be removed at a time. ``load_ablation_config``
+validates the families against the feature config, and ``ablation_feature_sets``
+returns feature-config-shaped dicts ("all" and one "without_<family>" per family)
+for ``build_pipeline``. They change column lists only; no data is read.
+
 Known limitations:
 - Every ``load_tabular_role`` call scans the full raw CSV through
   ``load_tabular_split``, so loading both roles scans it twice. There is no cache.
 - Roles derive only from manifest ``issue_month``; no new split or ID files are
   written, so the role of a loan exists only by rerunning this code with the
   same config.
+- ``ablation_feature_sets`` assumes the consuming ColumnTransformer uses
+  ``remainder="drop"``; nothing here checks it (see that function's docstring).
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import tomllib
@@ -57,12 +66,14 @@ from src.tabular.preprocess import (
     DEFAULT_DATA_DIR,
     DEFAULT_FEATURE_CONFIG,
     REPO_ROOT,
+    feature_columns,
     load_feature_config,
     load_tabular_split,
 )
 
 DEFAULT_DEVELOPMENT_CONFIG = REPO_ROOT / "configs" / "tabular_development_v1.toml"
 DEFAULT_COHORT_CONFIG = REPO_ROOT / "configs" / "cohort_v1.toml"
+DEFAULT_ABLATION_CONFIG = REPO_ROOT / "configs" / "tabular_ablation_v1.toml"
 
 ROLES = ("model_fit", "calibration")
 _MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -71,6 +82,7 @@ REQUIRED_DEVELOPMENT_CONFIG_KEYS = {
     "development_version", "status", "cohort_version", "split_version", "source_split",
     "roles", "expected",
 }
+REQUIRED_ABLATION_CONFIG_KEYS = {"ablation_version", "feature_set_version", "status", "families"}
 
 # Every ValueError message raised by this module, as str.format templates.
 # Placeholders are filled at the raise site; messages with none are used as-is.
@@ -115,6 +127,16 @@ ERROR_MESSAGES: dict[str, str] = {
     # Output
     "role_rows_not_loaded": "Loaded {loaded} {role} rows but the manifest assigns {expected}",
     "output_not_aligned": "Feature and target rows are not aligned on loan_id",
+    # Ablation config (load_ablation_config)
+    "ablation_missing_keys": "Ablation config is missing keys: {missing}",
+    "ablation_wrong_feature_set": (
+        "Ablation config targets {actual!r} but the feature config is {expected!r}"
+    ),
+    "ablation_no_families": "Ablation config defines no families",
+    "ablation_empty_family": "Family {family!r} must list at least one feature",
+    "ablation_unknown_features": "Family {family!r} lists features that are not model features: {unknown}",
+    "ablation_duplicate_features": "Features listed in more than one family (or twice): {duplicates}",
+    "ablation_unassigned_features": "Model features in no family: {missing}",
 }
 
 
@@ -317,6 +339,88 @@ def load_tabular_role(
     features, target = features.loc[keep], target.loc[keep]
     _validate_output(features, target, role, config["expected"]["role_rows"][role])
     return features, target
+
+
+def _validate_ablation_families(
+    ablation_config: dict[str, Any], feature_config: dict[str, Any]
+) -> None:
+    """Require every model feature in exactly one non-empty family, with no unknown names."""
+    families = ablation_config["families"]
+    if not families:
+        raise ValueError(ERROR_MESSAGES["ablation_no_families"])
+
+    model_features = feature_columns(feature_config)
+    seen: list[str] = []
+    for family, spec in families.items():
+        features = spec.get("features", [])
+        if not features:
+            raise ValueError(ERROR_MESSAGES["ablation_empty_family"].format(family=family))
+        if unknown := [name for name in features if name not in model_features]:
+            raise ValueError(ERROR_MESSAGES["ablation_unknown_features"].format(
+                family=family, unknown=unknown,
+            ))
+        seen.extend(features)
+
+    if duplicates := sorted({name for name in seen if seen.count(name) > 1}):
+        raise ValueError(ERROR_MESSAGES["ablation_duplicate_features"].format(
+            duplicates=duplicates,
+        ))
+    if missing := [name for name in model_features if name not in seen]:
+        raise ValueError(ERROR_MESSAGES["ablation_unassigned_features"].format(missing=missing))
+
+
+def load_ablation_config(
+    path: str | Path = DEFAULT_ABLATION_CONFIG,
+    feature_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Load an ablation config and validate its families against a loaded feature config.
+
+    ``feature_config`` defaults to the approved feature config. Raises
+    ValueError for missing keys, a feature_set_version that differs from the
+    feature config's, no families, an empty family, a name that is not a model
+    feature, a feature in more than one family, or a model feature in none.
+    """
+    if feature_config is None:
+        feature_config = load_feature_config()
+    with Path(path).open("rb") as stream:
+        config = tomllib.load(stream)
+
+    if missing := REQUIRED_ABLATION_CONFIG_KEYS - set(config):
+        raise ValueError(ERROR_MESSAGES["ablation_missing_keys"].format(missing=sorted(missing)))
+    if config["feature_set_version"] != feature_config["feature_set_version"]:
+        raise ValueError(ERROR_MESSAGES["ablation_wrong_feature_set"].format(
+            actual=config["feature_set_version"], expected=feature_config["feature_set_version"],
+        ))
+    _validate_ablation_families(config, feature_config)
+    return config
+
+
+def get_ablation_feature_sets(
+    feature_config: dict[str, Any], ablation_config: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Return {"all": cfg, "without_<family>": cfg, ...} in the ablation config's family order.
+
+    Each value is a fresh deep copy of ``feature_config`` with the family's
+    names removed from ["model"]["numeric"] and ["model"]["categorical"],
+    keeping the remaining order. Only column lists change, so one loaded X
+    (every model column) can serve every variant -- but only if the consuming
+    pipeline's ColumnTransformer uses ``remainder="drop"``. With
+    ``"passthrough"``, the removed family's columns reach the model and the
+    ablation is invalid. This module does not check that; the integrator must.
+    The families are re-validated here so a config pair that disagrees cannot
+    slip through.
+    """
+    _validate_ablation_families(ablation_config, feature_config)
+    sets = {"all": copy.deepcopy(feature_config)}
+    for family, spec in ablation_config["families"].items():
+        removed = set(spec["features"])
+        variant = copy.deepcopy(feature_config)
+        for kind in ("numeric", "categorical"):
+            variant["model"][kind] = [
+                name for name in variant["model"][kind] if name not in removed
+            ]
+        sets[f"without_{family}"] = variant
+    return sets
 
 
 def profile_roles(roles: pd.DataFrame, manifest: pd.DataFrame) -> dict[str, Any]:
