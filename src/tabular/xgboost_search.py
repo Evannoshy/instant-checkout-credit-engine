@@ -45,6 +45,7 @@ from src.tabular.xgboost_baseline import (
     load_model_fit,
     load_xgboost_config,
     run_metadata,
+    validate_runtime,
 )
 
 REQUIRED_SEARCH_KEYS = {"max_trials", "primary_metric", "tolerance", "max_std_ratio", "trials"}
@@ -204,6 +205,7 @@ def run_search(
     xgboost_config_path: str | Path = DEFAULT_XGBOOST_CONFIG,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Load model_fit, run every trial, select one, and write the trial log and decision."""
+    validate_runtime()
     xgboost_config = load_xgboost_config(xgboost_config_path)
     validate_trials(xgboost_config)
     feature_config = preprocess.load_feature_config()

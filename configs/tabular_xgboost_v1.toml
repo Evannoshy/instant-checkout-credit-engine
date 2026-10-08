@@ -3,8 +3,8 @@ status = "proposed"
 
 # Conservative default (Task 1). No class weighting, so raw probabilities stay
 # near prevalence for the calibration step; no early stopping, so a run needs
-# no extra holdout and is fully determined by the seed. n_jobs = 1 keeps the
-# floating-point summation order fixed across machines.
+# no extra holdout. The seed and n_jobs = 1 support repeatable runs in a fixed
+# environment; they do not guarantee identical results across package versions.
 [model]
 n_estimators = 300
 max_depth = 3

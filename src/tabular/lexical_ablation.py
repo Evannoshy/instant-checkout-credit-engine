@@ -42,6 +42,7 @@ from src.tabular.xgboost_baseline import (
     load_xgboost_config,
     paired_deltas,
     run_metadata,
+    validate_runtime,
 )
 
 
@@ -112,6 +113,7 @@ def run_lexical_ablation(
     xgboost_config_path: str | Path = DEFAULT_XGBOOST_CONFIG,
 ) -> pd.DataFrame:
     """Load and join model_fit, run the experiment, write lexical_ablation_results.csv."""
+    validate_runtime()
     xgboost_config = load_xgboost_config(xgboost_config_path)
     logistic_config = logistic_baseline.load_logistic_config()
     feature_config = preprocess.load_feature_config()

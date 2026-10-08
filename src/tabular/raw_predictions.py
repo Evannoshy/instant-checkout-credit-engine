@@ -44,6 +44,7 @@ from src.tabular.xgboost_baseline import (
     environment,
     load_model_fit,
     load_xgboost_config,
+    validate_runtime,
 )
 
 DEFAULT_SELECTION = DEFAULT_OUTPUT_DIR / "xgboost_selection.json"
@@ -162,9 +163,15 @@ def run_raw_predictions(
     xgboost_config_path: str | Path = DEFAULT_XGBOOST_CONFIG,
 ) -> dict[str, Any]:
     """Load the three row sets, predict every candidate, write CSVs and manifest.json."""
+    runtime = validate_runtime()
     xgboost_config = load_xgboost_config(xgboost_config_path)
     feature_config = preprocess.load_feature_config()
     selection = json.loads(Path(selection_path).read_text(encoding="utf-8"))
+    if selection.get("environment") != runtime:
+        raise ValueError(
+            "Search selection used a different environment. Rerun the search in this "
+            "environment before exporting calibration and validation predictions."
+        )
     candidates = build_shortlist(
         feature_config, xgboost_config, logistic_baseline.load_logistic_config(), selection
     )

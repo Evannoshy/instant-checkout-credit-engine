@@ -34,6 +34,7 @@ import json
 import platform
 import tomllib
 from dataclasses import dataclass
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Callable
 
@@ -53,6 +54,11 @@ MODEL_NAME = "xgboost"
 REPO_ROOT = preprocess.REPO_ROOT
 DEFAULT_XGBOOST_CONFIG = REPO_ROOT / "configs" / "tabular_xgboost_v1.toml"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "reports" / "tabular"
+DEFAULT_REQUIREMENTS = REPO_ROOT / "src" / "tabular" / "requirements.txt"
+RUNTIME_PACKAGES = {
+    "pandas": "pandas", "numpy": "numpy", "scikit-learn": "scikit_learn",
+    "scipy": "scipy", "joblib": "joblib", "pyarrow": "pyarrow", "xgboost": "xgboost",
+}
 
 REQUIRED_XGBOOST_CONFIG_KEYS = {"model_version", "model", "cv", "search", "evaluation"}
 REQUIRED_MODEL_KEYS = {
@@ -296,7 +302,47 @@ def environment() -> dict[str, str]:
         "numpy": np.__version__,
         "scikit_learn": sklearn.__version__,
         "xgboost": xgboost.__version__,
+        "scipy": version("scipy"),
+        "joblib": version("joblib"),
+        "pyarrow": version("pyarrow"),
+        "platform": platform.system(),
+        "machine": platform.machine(),
     }
+
+
+def validate_environment(
+    runtime: dict[str, str], requirements_path: str | Path = DEFAULT_REQUIREMENTS
+) -> None:
+    """Check the recorded modelling packages against the repository's exact pins."""
+    pins = {}
+    for line in Path(requirements_path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            name, separator, pinned = line.partition("==")
+            if not separator:
+                raise ValueError(f"Expected an exact requirement pin; got {line!r}")
+            pins[name] = pinned
+    errors = []
+    if not runtime.get("python", "").startswith("3.13."):
+        errors.append("use Python 3.13 for these experiments")
+    for package, key in RUNTIME_PACKAGES.items():
+        if package not in pins:
+            errors.append(f"{package} has no requirement pin")
+        elif runtime.get(key) != pins[package]:
+            errors.append(f"{package}: expected {pins[package]}, got {runtime.get(key, 'unreported')}")
+    if errors:
+        raise ValueError(
+            "Experiment environment does not match src/tabular/requirements.txt: "
+            + "; ".join(errors)
+            + ". Install the pinned requirements before running or regenerating results."
+        )
+
+
+def validate_runtime() -> dict[str, str]:
+    """Reject an unsupported runtime before a runner reads data or fits a model."""
+    runtime = environment()
+    validate_environment(runtime)
+    return runtime
 
 
 def _cv_record(result: CrossValidationResult) -> dict[str, Any]:
@@ -446,6 +492,7 @@ def run_default_comparison(
     logistic_config_path: str | Path = logistic_baseline.DEFAULT_LOGISTIC_CONFIG,
 ) -> dict[str, Any]:
     """Load model_fit, run Task 1 and write xgboost_default_comparison.json."""
+    validate_runtime()
     xgboost_config = load_xgboost_config(xgboost_config_path)
     logistic_config = logistic_baseline.load_logistic_config(logistic_config_path)
     feature_config = preprocess.load_feature_config()
@@ -475,6 +522,7 @@ def run_feature_ablation(
     xgboost_config_path: str | Path = DEFAULT_XGBOOST_CONFIG,
 ) -> pd.DataFrame:
     """Load model_fit, run Task 2 and write xgboost_ablation_results.csv (+ provenance JSON)."""
+    validate_runtime()
     xgboost_config = load_xgboost_config(xgboost_config_path)
     feature_config = preprocess.load_feature_config()
     ablation_config = development.load_ablation_config(feature_config=feature_config)

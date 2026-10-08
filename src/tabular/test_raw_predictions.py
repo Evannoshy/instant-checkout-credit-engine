@@ -4,7 +4,8 @@ From the repository root, show each check and its actual pytest result with:
     python -m pytest src/tabular/test_raw_predictions.py -v -s
 
 Uses synthetic frames (no borrower data) and the REAL frozen configs. The
-real-data check is skipped unless LENDINGCLUB_RAW_CSV is set.
+committed-file check runs without the raw CSV. The refit check needs
+LENDINGCLUB_RAW_CSV.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.tabular import evaluate, logistic_baseline, preprocess, raw_predictions, xgboost_baseline
+from src.tabular import development, evaluate, logistic_baseline, preprocess, raw_predictions, xgboost_baseline
 from src.tabular.test_xgboost_baseline import make_synthetic
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -97,16 +98,50 @@ def test_overlapping_fit_and_scoring_rows_are_refused() -> None:
         raw_predictions.predict_candidates(shortlist(), fit_features, fit_target, leaked)
 
 
-@pytest.mark.skipif(
-    not os.environ.get("LENDINGCLUB_RAW_CSV"), reason="LENDINGCLUB_RAW_CSV is not set"
-)
 def test_real_prediction_files_cover_every_calibration_and_validation_loan() -> None:
     """The committed files hold 26,940 calibration and 21,784 validation loans per candidate."""
     manifest = json.loads((REAL_PREDICTION_DIR / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["test_rows_available_to_model"] == 0
     assert manifest["scoring_rows"] == {"calibration": 26940, "validation": 21784}
+    development_manifest, _ = evaluate.load_manifest(REPOSITORY_ROOT / "data")
+    roles = development.assign_development_roles(REPOSITORY_ROOT / "data")
+    expected = {
+        "calibration": set(roles.index[roles["role"].eq("calibration")]),
+        "validation": set(development_manifest.loc[
+            development_manifest["split"].eq("validation"), "loan_id"
+        ]),
+    }
+    target = development_manifest.set_index("loan_id")["target"]
     for name, summary in manifest["files"].items():
         frame = pd.read_csv(REAL_PREDICTION_DIR / name, dtype={"loan_id": str})
+        split = name.removesuffix(".csv").rsplit("_", 1)[1]
+        evaluate.validate_prediction_frame(frame, expected[split])
+        assert frame["split"].eq(split).all()
+        assert frame["model_version"].eq(summary["model_version"]).all()
         assert len(frame) == summary["expected_rows"] and frame["loan_id"].is_unique
         values = frame["p_default_tabular"].to_numpy(dtype=np.float64)
         assert np.isfinite(values).all() and values.min() >= 0 and values.max() <= 1
+        metrics = evaluate.evaluate_predictions(target.loc[frame["loan_id"]].to_numpy(), values)
+        for metric, value in summary["raw_metrics"].items():
+            assert metrics[metric] == pytest.approx(value, rel=1e-8, abs=1e-10)
+
+
+@pytest.mark.skipif(
+    not os.environ.get("LENDINGCLUB_RAW_CSV"), reason="LENDINGCLUB_RAW_CSV is not set"
+)
+def test_real_candidate_refit_reproduces_committed_predictions(tmp_path: Path) -> None:
+    """A refit in the recorded environment reproduces every committed handoff probability."""
+    rerun = raw_predictions.run_raw_predictions(
+        REPOSITORY_ROOT / "data", Path(os.environ["LENDINGCLUB_RAW_CSV"]), tmp_path
+    )
+    saved = json.loads((REAL_PREDICTION_DIR / "manifest.json").read_text(encoding="utf-8"))
+    assert rerun["environment"] == saved["environment"]
+    assert set(rerun["files"]) == set(saved["files"])
+    for name in saved["files"]:
+        expected = pd.read_csv(REAL_PREDICTION_DIR / name).set_index("loan_id").sort_index()
+        actual = pd.read_csv(tmp_path / name).set_index("loan_id").sort_index()
+        assert actual.index.equals(expected.index)
+        assert actual["model_version"].equals(expected["model_version"])
+        np.testing.assert_allclose(
+            actual["p_default_tabular"], expected["p_default_tabular"], rtol=1e-10, atol=1e-10
+        )
