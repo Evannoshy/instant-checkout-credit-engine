@@ -1,4 +1,4 @@
-# Tabular track. Verified with Python 3.13.9. Run from the repository root:
+# Tabular track. Reference experiments use Python 3.13.15. Run from the repository root:
 # python -m pip install -r src/tabular/requirements.txt
 pandas==3.0.5
 numpy==2.5.3
@@ -8,3 +8,4 @@ joblib==1.6.0
 pytest==9.1.1
 matplotlib==3.11.2
 pyarrow==23.0.1
+xgboost==3.4.1

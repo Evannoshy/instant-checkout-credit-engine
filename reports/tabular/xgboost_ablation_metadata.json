@@ -1,0 +1,80 @@
+{
+  "model_version": "tabular-xgboost-v1",
+  "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+  "split_version": "split-v1",
+  "cohort": "real_text_matured_v1",
+  "training_rows": "model_fit role only",
+  "test_rows_available_to_model": 0,
+  "cv": {
+    "n_folds": 5,
+    "min_train_share": 0.4,
+    "folds": [
+      {
+        "fold": 0,
+        "train_rows": 24119,
+        "holdout_rows": 7022,
+        "holdout_first_month": "2011-11",
+        "holdout_last_month": "2012-03"
+      },
+      {
+        "fold": 1,
+        "train_rows": 31141,
+        "holdout_rows": 6033,
+        "holdout_first_month": "2012-04",
+        "holdout_last_month": "2012-06"
+      },
+      {
+        "fold": 2,
+        "train_rows": 37174,
+        "holdout_rows": 7095,
+        "holdout_first_month": "2012-07",
+        "holdout_last_month": "2012-08"
+      },
+      {
+        "fold": 3,
+        "train_rows": 44269,
+        "holdout_rows": 7883,
+        "holdout_first_month": "2012-09",
+        "holdout_last_month": "2012-10"
+      },
+      {
+        "fold": 4,
+        "train_rows": 52152,
+        "holdout_rows": 7201,
+        "holdout_first_month": "2012-11",
+        "holdout_last_month": "2012-12"
+      }
+    ]
+  },
+  "evaluation": {
+    "bootstrap_resamples": 1000,
+    "seed": 42
+  },
+  "environment": {
+    "python": "3.13.15",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "pyarrow": "23.0.1",
+    "platform": "Windows",
+    "machine": "AMD64"
+  },
+  "ablation_version": "tabular_ablation_v1",
+  "xgboost_params": {
+    "n_estimators": 300,
+    "max_depth": 3,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.0,
+    "tree_method": "hist",
+    "objective": "binary:logistic",
+    "n_jobs": 1,
+    "random_state": 42
+  }
+}

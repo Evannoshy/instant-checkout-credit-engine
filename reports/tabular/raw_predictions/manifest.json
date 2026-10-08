@@ -1,0 +1,233 @@
+{
+  "fit_rows": {
+    "role": "model_fit",
+    "rows": 59353
+  },
+  "scoring_rows": {
+    "calibration": 26940,
+    "validation": 21784
+  },
+  "test_rows_available_to_model": 0,
+  "selected_trial_id": 1,
+  "note": "Raw, uncalibrated probabilities. Fit a calibrator on the calibration files only.",
+  "files": {
+    "logistic_regression_calibration.csv": {
+      "model_name": "logistic_regression",
+      "model_version": "tabular-logistic-v1-model-fit",
+      "params": {
+        "C": 1.0,
+        "class_weight": "balanced",
+        "max_iter": 1000,
+        "random_state": 42
+      },
+      "rows": 26940,
+      "expected_rows": 26940,
+      "missing_ids": 0,
+      "min_probability": 0.06448807780715621,
+      "max_probability": 0.9000723670246689,
+      "raw_metrics": {
+        "rows": 26940,
+        "positives": 4090,
+        "prevalence": 0.151818856718634,
+        "roc_auc": 0.6618971286106371,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2542941599379812,
+        "pr_auc_baseline": 0.151818856718634,
+        "brier_score": 0.23788059662135724,
+        "log_loss": 0.6698062265627824,
+        "f1_at_0.5": 0.3263376084985102,
+        "f1_best": 0.33187333955625764,
+        "f1_best_threshold": 0.5207937926525726
+      }
+    },
+    "logistic_regression_validation.csv": {
+      "model_name": "logistic_regression",
+      "model_version": "tabular-logistic-v1-model-fit",
+      "params": {
+        "C": 1.0,
+        "class_weight": "balanced",
+        "max_iter": 1000,
+        "random_state": 42
+      },
+      "rows": 21784,
+      "expected_rows": 21784,
+      "missing_ids": 0,
+      "min_probability": 0.08462161827566093,
+      "max_probability": 0.8856467070046774,
+      "raw_metrics": {
+        "rows": 21784,
+        "positives": 3298,
+        "prevalence": 0.15139551964744766,
+        "roc_auc": 0.6659989100958312,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2575375225373021,
+        "pr_auc_baseline": 0.15139551964744766,
+        "brier_score": 0.23630887569162146,
+        "log_loss": 0.6665737985243545,
+        "f1_at_0.5": 0.3332791416029914,
+        "f1_best": 0.341846386681801,
+        "f1_best_threshold": 0.5349827113511507
+      }
+    },
+    "xgboost_default_calibration.csv": {
+      "model_name": "xgboost",
+      "model_version": "tabular-xgboost-v1-default",
+      "params": {
+        "n_estimators": 300,
+        "max_depth": 3,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 5,
+        "reg_lambda": 1.0,
+        "reg_alpha": 0.0,
+        "tree_method": "hist",
+        "objective": "binary:logistic",
+        "n_jobs": 1,
+        "random_state": 42
+      },
+      "rows": 26940,
+      "expected_rows": 26940,
+      "missing_ids": 0,
+      "min_probability": 0.016902707517147064,
+      "max_probability": 0.5681377053260803,
+      "raw_metrics": {
+        "rows": 26940,
+        "positives": 4090,
+        "prevalence": 0.151818856718634,
+        "roc_auc": 0.6625882950891591,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2536025039295444,
+        "pr_auc_baseline": 0.151818856718634,
+        "brier_score": 0.12311862198672405,
+        "log_loss": 0.4043893418376867,
+        "f1_at_0.5": 0.0,
+        "f1_best": 0.3308970099667774,
+        "f1_best_threshold": 0.16983334720134735
+      }
+    },
+    "xgboost_default_validation.csv": {
+      "model_name": "xgboost",
+      "model_version": "tabular-xgboost-v1-default",
+      "params": {
+        "n_estimators": 300,
+        "max_depth": 3,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 5,
+        "reg_lambda": 1.0,
+        "reg_alpha": 0.0,
+        "tree_method": "hist",
+        "objective": "binary:logistic",
+        "n_jobs": 1,
+        "random_state": 42
+      },
+      "rows": 21784,
+      "expected_rows": 21784,
+      "missing_ids": 0,
+      "min_probability": 0.014107855036854744,
+      "max_probability": 0.5116134881973267,
+      "raw_metrics": {
+        "rows": 21784,
+        "positives": 3298,
+        "prevalence": 0.15139551964744766,
+        "roc_auc": 0.6659724120795656,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2563701539117795,
+        "pr_auc_baseline": 0.15139551964744766,
+        "brier_score": 0.12245978739190294,
+        "log_loss": 0.4028914251040795,
+        "f1_at_0.5": 0.0012117540139351712,
+        "f1_best": 0.3407798537774167,
+        "f1_best_threshold": 0.1821688413619995
+      }
+    },
+    "xgboost_trial1_calibration.csv": {
+      "model_name": "xgboost",
+      "model_version": "tabular-xgboost-v1-trial1",
+      "params": {
+        "n_estimators": 200,
+        "max_depth": 2,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 5,
+        "reg_lambda": 1.0,
+        "reg_alpha": 0.0,
+        "tree_method": "hist",
+        "objective": "binary:logistic",
+        "n_jobs": 1,
+        "random_state": 42
+      },
+      "rows": 26940,
+      "expected_rows": 26940,
+      "missing_ids": 0,
+      "min_probability": 0.030774034559726715,
+      "max_probability": 0.48097947239875793,
+      "raw_metrics": {
+        "rows": 26940,
+        "positives": 4090,
+        "prevalence": 0.151818856718634,
+        "roc_auc": 0.6612854643604243,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.25411690101163953,
+        "pr_auc_baseline": 0.151818856718634,
+        "brier_score": 0.12310262916386598,
+        "log_loss": 0.40473833817753946,
+        "f1_at_0.5": 0.0,
+        "f1_best": 0.3305142857142857,
+        "f1_best_threshold": 0.17172330617904663
+      }
+    },
+    "xgboost_trial1_validation.csv": {
+      "model_name": "xgboost",
+      "model_version": "tabular-xgboost-v1-trial1",
+      "params": {
+        "n_estimators": 200,
+        "max_depth": 2,
+        "learning_rate": 0.05,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "min_child_weight": 5,
+        "reg_lambda": 1.0,
+        "reg_alpha": 0.0,
+        "tree_method": "hist",
+        "objective": "binary:logistic",
+        "n_jobs": 1,
+        "random_state": 42
+      },
+      "rows": 21784,
+      "expected_rows": 21784,
+      "missing_ids": 0,
+      "min_probability": 0.030672285705804825,
+      "max_probability": 0.49338391423225403,
+      "raw_metrics": {
+        "rows": 21784,
+        "positives": 3298,
+        "prevalence": 0.15139551964744766,
+        "roc_auc": 0.66608740904152,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2583793795388654,
+        "pr_auc_baseline": 0.15139551964744766,
+        "brier_score": 0.1224166998613578,
+        "log_loss": 0.4030212075657436,
+        "f1_at_0.5": 0.0,
+        "f1_best": 0.3416693046322676,
+        "f1_best_threshold": 0.18431569635868073
+      }
+    }
+  },
+  "environment": {
+    "python": "3.13.15",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "pyarrow": "23.0.1",
+    "platform": "Windows",
+    "machine": "AMD64"
+  }
+}
