@@ -275,7 +275,7 @@ def test_paired_deltas_refuse_models_scored_on_different_rows() -> None:
     full = xgboost_baseline.cross_validate(default_pipeline, features, target, folds)
     partial = xgboost_baseline.cross_validate(default_pipeline, features, target, folds[1:])
     with pytest.raises(ValueError, match="same out-of-fold rows"):
-        xgboost_baseline._paired_deltas(
+        xgboost_baseline.paired_deltas(
             target, full, partial, ("roc_auc",), {"bootstrap_resamples": 5, "seed": 0}
         )
 

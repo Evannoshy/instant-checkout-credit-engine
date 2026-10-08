@@ -35,6 +35,7 @@ from src.tabular import preprocess
 from src.tabular.xgboost_baseline import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_XGBOOST_CONFIG,
+    HIGHER_IS_BETTER,
     SUMMARY_METRICS,
     CrossValidationResult,
     Fold,
@@ -47,7 +48,6 @@ from src.tabular.xgboost_baseline import (
 )
 
 REQUIRED_SEARCH_KEYS = {"max_trials", "primary_metric", "tolerance", "max_std_ratio", "trials"}
-HIGHER_IS_BETTER = {"roc_auc": True, "pr_auc": True, "brier_score": False, "log_loss": False}
 STATUS_OK = "ok"
 STATUS_FAILED = "failed"
 

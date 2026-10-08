@@ -68,6 +68,7 @@ METRIC_FUNCTIONS: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
 }
 CONFIDENCE_LEVEL = 0.95
 ABLATION_METRICS = ("roc_auc", "pr_auc")
+HIGHER_IS_BETTER = {"roc_auc": True, "pr_auc": True, "brier_score": False, "log_loss": False}
 REFERENCE_VARIANT = "all"
 
 
@@ -303,7 +304,7 @@ def _cv_record(result: CrossValidationResult) -> dict[str, Any]:
     return {"summary": result.summary, "folds": list(result.fold_metrics)}
 
 
-def _paired_deltas(
+def paired_deltas(
     target: pd.Series,
     baseline: CrossValidationResult,
     candidate: CrossValidationResult,
@@ -347,7 +348,7 @@ def compare_default_with_logistic(
     return {
         "logistic_regression": _cv_record(logistic),
         "xgboost_default": _cv_record(challenger),
-        "xgboost_minus_logistic": _paired_deltas(
+        "xgboost_minus_logistic": paired_deltas(
             target, logistic, challenger, SUMMARY_METRICS, xgboost_config["evaluation"]
         ),
     }
@@ -406,7 +407,7 @@ def run_feature_ablation_on(
     for name, result in results.items():
         family = name.removeprefix("without_")
         removed = [] if name == REFERENCE_VARIANT else ablation_config["families"][family]["features"]
-        deltas = _paired_deltas(
+        deltas = paired_deltas(
             target, reference, result, ABLATION_METRICS, xgboost_config["evaluation"]
         )
         rows.append(_ablation_row(name, removed, feature_sets[name], result, reference, deltas))
