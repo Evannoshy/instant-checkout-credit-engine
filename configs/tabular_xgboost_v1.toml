@@ -1,0 +1,195 @@
+model_version = "tabular-xgboost-v1"
+status = "proposed"
+feature_config = "configs/tabular_features_v1.toml"
+development_config = "configs/tabular_development_v1.toml"
+ablation_config = "configs/tabular_ablation_v1.toml"
+
+# Conservative default (Task 1). No class weighting, so raw probabilities stay
+# near prevalence for the calibration step; no early stopping, so a run needs
+# no extra holdout and is fully determined by the seed. n_jobs = 1 keeps the
+# floating-point summation order fixed across machines.
+[model]
+n_estimators = 300
+max_depth = 3
+learning_rate = 0.05
+subsample = 0.8
+colsample_bytree = 0.8
+min_child_weight = 5
+reg_lambda = 1.0
+reg_alpha = 0.0
+tree_method = "hist"
+objective = "binary:logistic"
+n_jobs = 1
+random_state = 42
+
+# Time-aware cross-validation inside model_fit rows only (expanding window).
+# Rows are ordered by issue_month; the first min_train_share of rows is never
+# held out, and the rest is cut into n_folds contiguous month blocks of about
+# equal size. Each fold trains on every month before its block. A month is
+# never split between folds.
+[cv]
+n_folds = 5
+min_train_share = 0.4
+
+# Bounded search (Task 3): exactly the trials below, declared before any run.
+# Each trial overrides only the listed [model] keys. Selection uses model_fit
+# cross-validation only:
+# 1. Drop failed trials and unstable ones (fold std > max_std_ratio x the
+#    median fold std of successful trials).
+# 2. The reference is the best remaining mean primary_metric. A trial is
+#    eligible when its mean is within max(tolerance, reference standard error)
+#    of the reference.
+# 3. Among eligible trials pick the lowest complexity, n_estimators x 2^max_depth,
+#    then the lower trial_id.
+[search]
+max_trials = 20
+primary_metric = "roc_auc"
+tolerance = 0.002
+max_std_ratio = 1.5
+
+[[search.trials]]
+trial_id = 0  # the Task 1 default
+[search.trials.params]
+
+[[search.trials]]
+trial_id = 1
+[search.trials.params]
+n_estimators = 200
+max_depth = 2
+
+[[search.trials]]
+trial_id = 2
+[search.trials.params]
+n_estimators = 400
+max_depth = 2
+
+[[search.trials]]
+trial_id = 3
+[search.trials.params]
+n_estimators = 800
+max_depth = 2
+learning_rate = 0.03
+
+[[search.trials]]
+trial_id = 4
+[search.trials.params]
+n_estimators = 200
+learning_rate = 0.1
+
+[[search.trials]]
+trial_id = 5
+[search.trials.params]
+n_estimators = 400
+learning_rate = 0.03
+
+[[search.trials]]
+trial_id = 6
+[search.trials.params]
+n_estimators = 800
+learning_rate = 0.03
+reg_lambda = 5.0
+
+[[search.trials]]
+trial_id = 7
+[search.trials.params]
+subsample = 0.7
+colsample_bytree = 0.7
+
+[[search.trials]]
+trial_id = 8
+[search.trials.params]
+subsample = 0.9
+colsample_bytree = 0.9
+
+[[search.trials]]
+trial_id = 9
+[search.trials.params]
+min_child_weight = 1
+
+[[search.trials]]
+trial_id = 10
+[search.trials.params]
+min_child_weight = 20
+
+[[search.trials]]
+trial_id = 11
+[search.trials.params]
+reg_lambda = 5.0
+
+[[search.trials]]
+trial_id = 12
+[search.trials.params]
+n_estimators = 200
+max_depth = 4
+
+[[search.trials]]
+trial_id = 13
+[search.trials.params]
+n_estimators = 400
+max_depth = 4
+learning_rate = 0.03
+min_child_weight = 20
+reg_lambda = 5.0
+
+[[search.trials]]
+trial_id = 14
+[search.trials.params]
+n_estimators = 400
+max_depth = 4
+subsample = 0.7
+colsample_bytree = 0.7
+min_child_weight = 20
+reg_lambda = 5.0
+
+[[search.trials]]
+trial_id = 15
+[search.trials.params]
+n_estimators = 200
+max_depth = 5
+learning_rate = 0.03
+min_child_weight = 20
+reg_lambda = 5.0
+
+[[search.trials]]
+trial_id = 16
+[search.trials.params]
+n_estimators = 400
+max_depth = 5
+learning_rate = 0.03
+subsample = 0.7
+colsample_bytree = 0.7
+min_child_weight = 20
+reg_lambda = 5.0
+
+[[search.trials]]
+trial_id = 17
+[search.trials.params]
+n_estimators = 800
+max_depth = 4
+learning_rate = 0.03
+min_child_weight = 20
+reg_lambda = 5.0
+
+[[search.trials]]
+trial_id = 18  # deliberately aggressive: shows what overfitting costs
+[search.trials.params]
+n_estimators = 200
+max_depth = 5
+learning_rate = 0.1
+subsample = 0.9
+colsample_bytree = 0.9
+min_child_weight = 1
+
+[[search.trials]]
+trial_id = 19  # deliberately aggressive
+[search.trials.params]
+n_estimators = 800
+max_depth = 5
+subsample = 0.9
+colsample_bytree = 0.9
+min_child_weight = 1
+
+# Paired bootstrap for differences between two models on the same rows.
+[evaluation]
+bootstrap_resamples = 1000
+seed = 42
