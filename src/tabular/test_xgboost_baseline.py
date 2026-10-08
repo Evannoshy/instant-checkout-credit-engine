@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.tabular import development, preprocess, xgboost_baseline
+from src.tabular import development, logistic_baseline, preprocess, xgboost_baseline
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 XGBOOST_CONFIG = REPOSITORY_ROOT / "configs" / "tabular_xgboost_v1.toml"
@@ -219,6 +219,65 @@ def test_test_split_is_rejected_before_any_file_is_read(tmp_path: Path) -> None:
         development.load_tabular_role(tmp_path, tmp_path / "missing.csv", "test")
     with pytest.raises(ValueError, match="final test set is locked"):
         preprocess.load_tabular_split(tmp_path, tmp_path / "missing.csv", "test")
+
+
+def fast_xgboost_config() -> dict:
+    """The real config with a small bootstrap, as a new dict (the loaded one is not mutated)."""
+    config = xgboost_baseline.load_xgboost_config(XGBOOST_CONFIG)
+    return {**config, "evaluation": {**config["evaluation"], "bootstrap_resamples": 20}}
+
+
+def test_default_comparison_scores_both_models_on_the_same_rows() -> None:
+    """Task 1 reports LR and XGBoost summaries plus paired deltas for all four metrics."""
+    features, target, issue_month = make_synthetic()
+    folds = xgboost_baseline.time_aware_folds(issue_month, n_folds=3, min_train_share=0.4)
+    report = xgboost_baseline.compare_default_with_logistic(
+        features, target, folds, preprocess.load_feature_config(), fast_xgboost_config(),
+        logistic_baseline.load_logistic_config(),
+    )
+
+    for model in ("logistic_regression", "xgboost_default"):
+        assert set(report[model]["summary"]) == set(xgboost_baseline.SUMMARY_METRICS)
+        assert [fold["rows"] for fold in report[model]["folds"]] == [
+            len(fold.holdout_ids) for fold in folds
+        ]
+    assert set(report["xgboost_minus_logistic"]) == set(xgboost_baseline.SUMMARY_METRICS)
+    for delta in report["xgboost_minus_logistic"].values():
+        assert delta["ci_low"] <= delta["ci_high"]
+
+
+def test_feature_ablation_removes_one_family_at_a_time() -> None:
+    """Task 2 gives an all-feature row plus one row per family, with matching removed features."""
+    features, target, issue_month = make_synthetic()
+    folds = xgboost_baseline.time_aware_folds(issue_month, n_folds=3, min_train_share=0.4)
+    feature_config = preprocess.load_feature_config()
+    ablation_config = development.load_ablation_config(feature_config=feature_config)
+
+    results = xgboost_baseline.run_feature_ablation_on(
+        features, target, folds, feature_config, ablation_config, fast_xgboost_config()
+    )
+
+    families = ablation_config["families"]
+    assert results["variant"].tolist() == ["all", *(f"without_{name}" for name in families)]
+    reference = results.iloc[0]
+    assert reference["n_features"] == 9 and reference["removed_features"] == ""
+    assert reference["delta_roc_auc"] == 0 and reference["delta_pr_auc_ci_high"] == 0
+    for name, spec in families.items():
+        row = results.set_index("variant").loc[f"without_{name}"]
+        assert row["removed_features"] == ";".join(spec["features"])
+        assert row["n_features"] == 9 - len(spec["features"])
+
+
+def test_paired_deltas_refuse_models_scored_on_different_rows() -> None:
+    """Deltas between results with different out-of-fold rows raise instead of misaligning."""
+    features, target, issue_month = make_synthetic()
+    folds = xgboost_baseline.time_aware_folds(issue_month, n_folds=3, min_train_share=0.4)
+    full = xgboost_baseline.cross_validate(default_pipeline, features, target, folds)
+    partial = xgboost_baseline.cross_validate(default_pipeline, features, target, folds[1:])
+    with pytest.raises(ValueError, match="same out-of-fold rows"):
+        xgboost_baseline._paired_deltas(
+            target, full, partial, ("roc_auc",), {"bootstrap_resamples": 5, "seed": 0}
+        )
 
 
 @pytest.mark.skipif(
