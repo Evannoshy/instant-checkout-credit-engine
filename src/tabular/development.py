@@ -363,7 +363,7 @@ def assign_development_roles(
         raise ValueError(ERROR_MESSAGES["role_count_mismatch"].format(
             observed=observed, expected=expected,
         ))
-    
+
     return rows.sort_index()
 
 
