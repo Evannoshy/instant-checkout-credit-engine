@@ -585,3 +585,40 @@ def test_misaligned_features_and_target_are_rejected(
     features, target = _load_role(artificial_data_dir, "model_fit", config)
     with pytest.raises(ValueError, match=error_pattern("output_not_aligned")):
         join_lexical_features(features, target.iloc[::-1], artificial_data_dir, config)
+
+
+def test_logistic_pipeline_uses_all_joined_lexical_features(
+    artificial_data_dir: Path, tmp_path: Path, lexical_table: pd.DataFrame
+) -> None:
+    """All six joined columns reach the fitted logistic model without changing the v1 config."""
+    from src.tabular.logistic_baseline import build_pipeline, load_logistic_config
+
+    development_config = _write_lexical_config(tmp_path, lexical_table)
+    features, target = _load_role(artificial_data_dir, "model_fit", development_config)
+    joined, target = join_lexical_features(
+        features, target, artificial_data_dir, development_config
+    )
+
+    feature_config = load_feature_config(FEATURE_CONFIG)
+    original_config = copy.deepcopy(feature_config)
+    lexical_config = copy.deepcopy(feature_config)
+    lexical_columns = _lexical_columns()
+    lexical_config["model"]["numeric"].extend(lexical_columns)
+
+    pipeline = build_pipeline(lexical_config, load_logistic_config()).fit(joined, target)
+    transformer = pipeline.named_steps["preprocess"]
+    output_names = transformer.get_feature_names_out().tolist()
+    transformed = transformer.transform(joined)
+
+    assert feature_config == original_config
+    assert list(pipeline.feature_names_in_) == list(joined.columns)
+    assert len(pipeline.named_steps["classify"].coef_[0]) == len(output_names)
+
+    for column in lexical_columns:
+        name = f"numeric__{column}"
+        assert output_names.count(name) == 1
+        changed = joined.copy()
+        changed.loc[joined.index[0], column] += 1.0
+        changed_transformed = transformer.transform(changed)
+        position = output_names.index(name)
+        assert transformed[0, position] != changed_transformed[0, position], column

@@ -45,6 +45,28 @@ nothing is fitted across loans, so the join adds no cross-row leakage. Use it
 only in the named lexical experiment (nine features vs nine + six); if a
 recommended model needs these columns, that is a new feature-set version.
 
+For the logistic lexical experiment, add the six columns to a copy of the
+pipeline's numeric feature list. Joining columns alone does not select them:
+the original ColumnTransformer drops columns outside its configured lists.
+Use the approved config for loading raw data and keep this copied config
+inside the experiment::
+
+    from copy import deepcopy
+    from src.tabular.logistic_baseline import build_pipeline, load_logistic_config
+
+    X, y = load_tabular_role("data", "data/raw/loan.csv", "model_fit")
+    X_lex, y = join_lexical_features(X, y)
+    lexical_config = deepcopy(load_feature_config())
+    lexical_config["model"]["numeric"].extend(
+        load_development_config()["lexical"]["columns"]
+    )
+    lexical_model = build_pipeline(
+        lexical_config, load_logistic_config()
+    ).fit(X_lex, y)
+
+Use that fitted pipeline to score the joined calibration and validation
+frames. The original nine-feature config remains unchanged.
+
 Known limitations:
 - Every ``load_tabular_role`` call scans the full raw CSV through
   ``load_tabular_split``, so loading both roles scans it twice. There is no cache.
