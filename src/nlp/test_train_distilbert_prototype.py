@@ -83,6 +83,13 @@ def test_prototype_uses_the_specified_hyperparameters():
     assert (proto.BATCH_SIZE, MAX_LENGTH) == (16, 384)
 
 
+def test_scaled_uses_the_specified_configuration():
+    """10k scaling: 10,000 train / 5,000 validation loans, 3 epochs, the prototype's lr and batch size."""
+    assert (proto.SCALED.train_rows, proto.SCALED_VAL_ROWS, proto.SCALED.epochs) == (10_000, 5_000, 3)
+    assert proto.SCALED.learning_rate == proto.PROTOTYPE.learning_rate
+    assert proto.ROC_AUC_TARGET == 0.53
+
+
 def test_overfit_uses_the_specified_sample_and_epochs():
     """Overfit gate: 100 train loans for 10 epochs at the recommended lr 2e-5."""
     assert (proto.OVERFIT.train_rows, proto.OVERFIT.epochs, proto.OVERFIT.learning_rate) == (100, 10, 2e-5)
@@ -99,6 +106,19 @@ def test_build_trainer_passes_the_run_config_to_the_trainer(tiny_model, tokenize
     assert args.weight_decay > 0  # AdamW, not Adam
     assert args.eval_strategy == "epoch"
     assert args.seed == proto.RANDOM_STATE
+
+
+def test_build_trainer_keeps_the_best_epoch_only_when_asked(tiny_model, tokenizer, loans, tmp_path):
+    """Best-epoch selection by ROC-AUC is opt-in; otherwise nothing is checkpointed mid-run."""
+    ds = LoanTextDataset(loans, tokenizer)
+    default = proto.build_trainer(proto.PROTOTYPE, tiny_model(), tokenizer, ds, ds, tmp_path).args
+    assert default.save_strategy == "no"
+    assert not default.load_best_model_at_end
+    best = proto.build_trainer(proto.SCALED, tiny_model(), tokenizer, ds, ds, tmp_path, keep_best_epoch=True).args
+    assert best.save_strategy == best.eval_strategy == "epoch"
+    assert best.load_best_model_at_end
+    assert best.metric_for_best_model == "roc_auc"
+    assert best.greater_is_better
 
 
 def test_stratified_sample_keeps_the_default_rate_exactly(loans):
@@ -121,6 +141,28 @@ def test_compute_metrics_scores_the_positive_class_probability():
     metrics = proto.compute_metrics(EvalPrediction(predictions=logits, label_ids=labels))
     assert metrics["roc_auc"] == 1.0
     assert metrics["pr_auc"] == 1.0
+
+
+def test_roc_auc_interval_brackets_the_point_estimate_reproducibly():
+    """Perfect ranking gives [1, 1], random scores straddle 0.5, the same scores repeat, one class gives NaN."""
+    rng = np.random.default_rng(0)
+    labels = rng.integers(0, 2, size=400)
+    assert proto.roc_auc_interval(labels, labels.astype(float)) == (1.0, 1.0)
+    scores = rng.random(400)
+    ci_low, ci_high = proto.roc_auc_interval(labels, scores)
+    assert ci_low < 0.5 < ci_high
+    assert proto.roc_auc_interval(labels, scores) == (ci_low, ci_high)
+    assert all(np.isnan(proto.roc_auc_interval(np.zeros(10, dtype=int), scores[:10])))
+
+
+@pytest.mark.parametrize(("roc_auc", "ci_low", "expected"), [
+    (0.56, 0.54, "PASS"),  # Whole interval above 0.53
+    (0.54, 0.52, "INCONCLUSIVE"),  # Point estimate above, interval still includes 0.53
+    (0.52, 0.50, "FAIL"),
+])
+def test_target_verdict_passes_only_when_the_whole_interval_clears_the_target(roc_auc, ci_low, expected):
+    """A borderline ROC-AUC above 0.53 is inconclusive until its confidence interval clears 0.53."""
+    assert proto.target_verdict(roc_auc, ci_low) == expected
 
 
 def test_class_weights_follow_the_default_rate():
@@ -217,3 +259,45 @@ def test_a_crashed_run_leaves_the_previous_checkpoint_untouched(monkeypatch, sma
     with pytest.raises(RuntimeError, match="simulated crash"):
         proto.prototype(loans, loans, tokenizer)
     assert {p.name: p.read_bytes() for p in small_prototype.iterdir()} == before
+
+
+@pytest.fixture
+def small_scaled(monkeypatch, tiny_model, tmp_path):
+    """A 32-train / 16-validation scaled run that saves under tmp_path.
+
+    At lr 3e-2 validation ROC-AUC peaks before the last epoch, so "best" and "last" differ.
+    """
+    monkeypatch.setattr(proto, "SCALED", dataclasses.replace(proto.SCALED, train_rows=32, learning_rate=3e-2))
+    monkeypatch.setattr(proto, "SCALED_VAL_ROWS", 16)
+    monkeypatch.setattr(proto, "MODEL_DIR", tmp_path / "models" / "distilbert_prototype")
+    monkeypatch.setattr(proto, "REPORT_DIR", tmp_path / "reports")
+    return tmp_path
+
+
+@pytest.mark.parametrize(("weighted", "name"), [(True, "distilbert_10k"), (False, "distilbert_10k_unweighted")])
+def test_scaled_saves_the_best_epoch_and_a_slim_report(small_scaled, tokenizer, loans, weighted, name):
+    """The saved model is the best-ROC-AUC epoch, and the report lists every epoch under the run's own name."""
+    proto.scaled(loans, loans, tokenizer, weighted=weighted)
+    report = json.loads((small_scaled / "reports" / f"{name}_metrics.json").read_text(encoding="utf-8"))
+    epochs = report["validation_by_epoch"]
+    assert [e["epoch"] for e in epochs] == [1, 2, 3]
+    best = next(e for e in epochs if e["roc_auc"] == max(x["roc_auc"] for x in epochs))  # Trainer keeps the first maximum
+    assert best is not epochs[-1]  # Otherwise this test could not tell "best" from "last"
+    assert report["best_epoch"] == best["epoch"]
+    assert report["validation"] == {k: v for k, v in best.items() if k != "epoch"}
+    assert (report["config"]["class_weights"] is not None) == weighted
+    assert "peak_gpu_memory_gb" in report["environment"]
+    # Every epoch carries a ROC-AUC interval, and the verdict follows from the best epoch's.
+    assert all(e["roc_auc_ci_low"] <= e["roc_auc"] <= e["roc_auc_ci_high"] for e in epochs)
+    verdict = proto.target_verdict(best["roc_auc"], best["roc_auc_ci_low"])
+    assert report["roc_auc_target"] == {"target": 0.53, "verdict": verdict}
+
+    # Re-evaluating the saved weights reproduces the best epoch's loss, not the last epoch's.
+    model_dir = small_scaled / "models" / name
+    assert not list(model_dir.glob("checkpoint-*"))
+    train_ds = LoanTextDataset(proto.stratified_sample(loans, 32), tokenizer)
+    val_ds = LoanTextDataset(proto.stratified_sample(loans, 16), tokenizer)
+    saved = DistilBertForSequenceClassification.from_pretrained(model_dir)
+    trainer = proto.build_trainer(proto.SCALED, saved, tokenizer, train_ds, val_ds, small_scaled, class_weighted=weighted)
+    assert trainer.evaluate()["eval_loss"] == pytest.approx(best["loss"])
+    assert best["loss"] != pytest.approx(epochs[-1]["loss"])

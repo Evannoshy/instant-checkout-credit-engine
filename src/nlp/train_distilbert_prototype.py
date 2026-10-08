@@ -1,13 +1,17 @@
 """DistilBERT Training Prototype.
 
 Run from the repository root:
-    python -m src.nlp.train_distilbert_prototype [--stage overfit|prototype|all]
+    python -m src.nlp.train_distilbert_prototype [--stage overfit|prototype|scaled|all] [--unweighted]
 
 Stage 1 (overfit): train on 100 loans for 10 epochs and stop unless the loss
 reaches ~0 and the optimizer actually updates the weights.
 Stage 2 (prototype): fine-tune on 1,000 train loans for 2 epochs, report ROC-AUC
 and PR-AUC on 500 validation loans, and save the model with metrics.json to
 models/distilbert_prototype/.
+Stage 3 (scaled, not part of "all"): fine-tune on 10,000 train loans for 3 epochs
+with class-weighted loss (--unweighted for the comparison run), evaluate on 5,000
+validation loans, keep the epoch with the best ROC-AUC in models/distilbert_10k/,
+and write reports/nlp/distilbert_10k_metrics.json.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ import numpy as np
 import pandas as pd
 import torch
 import transformers
+from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 from transformers import (
     DistilBertForSequenceClassification,
@@ -43,20 +48,24 @@ from src.nlp.preprocess import PREPROCESS_VERSION, load_original_split
 ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = ROOT / "data"
 MODEL_DIR = ROOT / "models" / "distilbert_prototype"
+REPORT_DIR = ROOT / "reports" / "nlp"
 MODEL_NAME = "distilbert-base-uncased"
 BATCH_SIZE = 16
 OPTIMIZER = "adamw_torch"
 WEIGHT_DECAY = 0.01
 VAL_ROWS = 500
+SCALED_VAL_ROWS = 5_000 # 5,000 rows (760 defaults) give a 95% ROC-AUC interval of about +/-0.02; 500 rows give about +/-0.07.
+ROC_AUC_TARGET = 0.53
+BOOTSTRAP_RESAMPLES = 1_000
+CONFIDENCE = 0.95
 OVERFIT_MAX_LOSS = 0.15
-# Head + first-layer biases: no weight decay, so only gradients can change them.
 WATCHED_PARAMS = ("classifier.bias", "distilbert.transformer.layer.0.attention.q_lin.bias")
 DEVICE_NAME = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"
 
 
 @dataclass(frozen=True)
 class RunConfig:
-    """Settings that differ between the two stages."""
+    """Settings that differ between the stages."""
 
     train_rows: int
     epochs: int
@@ -68,6 +77,8 @@ class RunConfig:
 OVERFIT = RunConfig(train_rows=100, epochs=10, learning_rate=2e-5, lr_scheduler_type="constant", logging_steps=1)
 # Prototype Fine-Tuning: train on 1,000 loans and evaluate on 500 each of 2 epochs to test the Trainer end-to-end.
 PROTOTYPE = RunConfig(train_rows=1_000, epochs=2, learning_rate=2e-5, lr_scheduler_type="linear", logging_steps=10)
+# 10k scaling: 10x the prototype's data with the same lr and batch size, so data size (and weighting) is the only change.
+SCALED = RunConfig(train_rows=10_000, epochs=3, learning_rate=2e-5, lr_scheduler_type="linear", logging_steps=50)
 
 
 def precision() -> str:
@@ -88,8 +99,35 @@ def compute_metrics(eval_pred: EvalPrediction) -> dict[str, Any]:
     logits, labels = eval_pred.predictions, eval_pred.label_ids
     if not isinstance(logits, np.ndarray) or not isinstance(labels, np.ndarray):
         raise TypeError("Expected a single logits array and a single label array")
-    scores = torch.from_numpy(logits).float().softmax(-1)[:, 1].numpy()
-    return evaluate(labels, scores)
+    scores = default_probability(logits)
+    ci_low, ci_high = roc_auc_interval(labels, scores)
+    return {**evaluate(labels, scores), "roc_auc_ci_low": ci_low, "roc_auc_ci_high": ci_high}
+
+
+def default_probability(logits: np.ndarray) -> np.ndarray:
+    """Softmax probability of class 1 (default); float() first, since fp16 logits lose precision."""
+    return torch.from_numpy(logits).float().softmax(-1)[:, 1].numpy()
+
+
+def roc_auc_interval(labels: np.ndarray, scores: np.ndarray) -> tuple[float, float]:
+    """Percentile bootstrap confidence interval for ROC-AUC over resampled loans; NaN if one class only."""
+    if labels.min() == labels.max():
+        return math.nan, math.nan
+    rng = np.random.default_rng(RANDOM_STATE)
+    resampled = []
+    while len(resampled) < BOOTSTRAP_RESAMPLES:
+        index = rng.integers(0, len(labels), size=len(labels))
+        if labels[index].min() != labels[index].max():
+            resampled.append(roc_auc_score(labels[index], scores[index]))
+    tail = (1 - CONFIDENCE) / 2
+    return float(np.quantile(resampled, tail)), float(np.quantile(resampled, 1 - tail))
+
+
+def target_verdict(roc_auc: float, ci_low: float) -> str:
+    """PASS only if the whole confidence interval clears ROC_AUC_TARGET."""
+    if ci_low > ROC_AUC_TARGET:
+        return "PASS"
+    return "INCONCLUSIVE" if roc_auc > ROC_AUC_TARGET else "FAIL"
 
 
 def class_weights(targets: pd.Series) -> torch.Tensor:
@@ -143,13 +181,17 @@ def build_trainer(
     eval_ds: LoanTextDataset | None,
     output_dir: Path,
     class_weighted: bool = False,
+    keep_best_epoch: bool = False,
 ) -> Trainer:
-    """Build the Trainer both stages share (AdamW, batch size 16, seeded).
+    """Build the Trainer all stages share (AdamW, batch size 16, seeded).
 
     Args:
         eval_ds: Evaluated after every epoch; None skips evaluation.
-        output_dir: Trainer working directory; no mid-run checkpoints are written.
+        output_dir: Trainer working directory; no mid-run checkpoints are written
+            unless keep_best_epoch is set.
         class_weighted: Return a WeightedTrainer weighted by train_ds labels.
+        keep_best_epoch: Checkpoint each epoch and reload the one with the best
+            validation ROC-AUC when training ends. Requires eval_ds.
     """
     mixed = precision()
     args = TrainingArguments(
@@ -166,7 +208,11 @@ def build_trainer(
         bf16=mixed == "bf16",
         fp16=mixed == "fp16",
         train_sampling_strategy="group_by_length",  # Batches similar lengths -> less padding
-        save_strategy="no",  # Only the final model is saved, explicitly
+        save_strategy="epoch" if keep_best_epoch else "no",  # Otherwise only the final model is saved, explicitly
+        load_best_model_at_end=keep_best_epoch,
+        metric_for_best_model="roc_auc" if keep_best_epoch else None,
+        save_total_limit=1,
+        save_only_model=True,
         dataloader_pin_memory=torch.cuda.is_available(),
         seed=RANDOM_STATE,
     )
@@ -218,24 +264,44 @@ def overfit(train_df: pd.DataFrame, tokenizer: DistilBertTokenizerFast) -> None:
         raise RuntimeError(f"Overfit gate failed, the training loop is not learning: {failed}")
 
 
-def prototype(train_df: pd.DataFrame, val_df: pd.DataFrame, tokenizer: DistilBertTokenizerFast) -> None:
-    """Fine-tune on 1,000 loans, evaluate on 500, and save the model to MODEL_DIR."""
-    cfg = PROTOTYPE
+def fine_tune(
+    cfg: RunConfig,
+    train_df: pd.DataFrame,
+    val_df: pd.DataFrame,
+    tokenizer: DistilBertTokenizerFast,
+    val_rows: int,
+    model_dir: Path,
+    class_weighted: bool = False,
+    keep_best_epoch: bool = False,
+) -> dict[str, Any]:
+    """Fine-tune on stratified samples, save the model with metrics.json to model_dir, and return that record.
+
+    Args:
+        class_weighted: Train with WeightedTrainer.
+        keep_best_epoch: Save the epoch with the best validation ROC-AUC instead of the last one.
+    """
     print(
-        f"\n=== Stage 2: prototype {cfg.train_rows} train / {VAL_ROWS} val "
-        f"x {cfg.epochs} epochs (lr={cfg.learning_rate}) ==="
+        f"\n=== {model_dir.name}: {cfg.train_rows} train / {val_rows} val "
+        f"x {cfg.epochs} epochs (lr={cfg.learning_rate}, class_weighted={class_weighted}) ==="
     )
     train_sample = stratified_sample(train_df, cfg.train_rows)
-    val_sample = stratified_sample(val_df, VAL_ROWS)
+    val_sample = stratified_sample(val_df, val_rows)
 
     # Build in a sibling dir and swap in at the end: a crash never leaves a mixed checkpoint.
-    staging = MODEL_DIR.with_name(MODEL_DIR.name + ".partial")
+    staging = model_dir.with_name(model_dir.name + ".partial")
     shutil.rmtree(staging, ignore_errors=True)
     trainer = build_trainer(
         cfg, new_model(), tokenizer,
         LoanTextDataset(train_sample, tokenizer), LoanTextDataset(val_sample, tokenizer), staging,
+        class_weighted=class_weighted, keep_best_epoch=keep_best_epoch,
     )
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
     trainer.train()
+    peak_memory = {
+        "allocated": torch.cuda.max_memory_allocated() / 2**30,
+        "reserved": torch.cuda.max_memory_reserved() / 2**30,
+    } if torch.cuda.is_available() else None
 
     evals = [h for h in trainer.state.log_history if "eval_roc_auc" in h]
     for h in evals:
@@ -244,23 +310,28 @@ def prototype(train_df: pd.DataFrame, val_df: pd.DataFrame, tokenizer: DistilBer
             f"ROC-AUC {h['eval_roc_auc']:.4f} (baseline 0.5) | "
             f"PR-AUC {h['eval_pr_auc']:.4f} (baseline {h['eval_pr_auc_baseline']:.4f})"
         )
+    validation = max(evals, key=lambda h: h["eval_roc_auc"]) if keep_best_epoch else evals[-1]
 
+    for checkpoint in staging.glob("checkpoint-*"):
+        shutil.rmtree(checkpoint)
     trainer.save_model(str(staging))
     record = {
         "model_name": MODEL_NAME,
         "preprocess_version": PREPROCESS_VERSION,
         "config": {
             **asdict(cfg),
-            "val_rows": VAL_ROWS,
+            "val_rows": val_rows,
             "batch_size": BATCH_SIZE,
             "max_length": MAX_LENGTH,
             "optimizer": OPTIMIZER,
             "weight_decay": WEIGHT_DECAY,
             "precision": precision(),
             "seed": RANDOM_STATE,
+            "roc_auc_ci": {"resamples": BOOTSTRAP_RESAMPLES, "confidence": CONFIDENCE},
+            "class_weights": trainer.class_weights.tolist() if isinstance(trainer, WeightedTrainer) else None,
         },
         "train_positives": int(train_sample["target"].sum()),
-        "validation": evals[-1],
+        "validation": validation,
         "sample_loan_ids": {
             "train": train_sample["loan_id"].tolist(),
             "validation": val_sample["loan_id"].tolist(),
@@ -270,20 +341,87 @@ def prototype(train_df: pd.DataFrame, val_df: pd.DataFrame, tokenizer: DistilBer
             "torch": torch.__version__,
             "transformers": transformers.__version__,
             "device": DEVICE_NAME,
+            "peak_gpu_memory_gb": peak_memory,
         },
         "log_history": trainer.state.log_history,
     }
     (staging / "metrics.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
 
-    shutil.rmtree(MODEL_DIR, ignore_errors=True)
-    staging.rename(MODEL_DIR)
-    print(f"Saved model and metrics.json to {MODEL_DIR}")
+    shutil.rmtree(model_dir, ignore_errors=True)
+    staging.rename(model_dir)
+    print(f"Saved model and metrics.json to {model_dir}")
+    return record
+
+
+def prototype(train_df: pd.DataFrame, val_df: pd.DataFrame, tokenizer: DistilBertTokenizerFast) -> None:
+    """Fine-tune on 1,000 loans, evaluate on 500, and save the model to MODEL_DIR."""
+    fine_tune(PROTOTYPE, train_df, val_df, tokenizer, VAL_ROWS, MODEL_DIR)
+
+
+def slim_report(record: dict[str, Any]) -> dict[str, Any]:
+    """Reduce a run record to the layout of reports/nlp/distilbert_prototype_metrics.json."""
+
+    def metrics(h: dict[str, Any]) -> dict[str, Any]:
+        return {k.removeprefix("eval_"): v for k, v in h.items()
+                if k.startswith("eval_") and not k.endswith(("runtime", "per_second"))}
+
+    history = record["log_history"]
+    summary = next(h for h in history if "train_loss" in h)  # Trainer's end-of-training entry
+    return {
+        "model_name": record["model_name"],
+        "preprocess_version": record["preprocess_version"],
+        "config": record["config"],
+        "train": {
+            "rows": record["config"]["train_rows"],
+            "positives": record["train_positives"],
+            "steps": summary["step"],
+            "mean_loss": summary["train_loss"],
+            "runtime_seconds": summary["train_runtime"],
+        },
+        "best_epoch": round(record["validation"]["epoch"]),
+        "best_epoch_selected_by": "ROC-AUC on this validation sample (so slightly optimistic)",
+        "validation": metrics(record["validation"]),
+        "validation_by_epoch": [{"epoch": round(h["epoch"]), **metrics(h)} for h in history if "eval_roc_auc" in h],
+        "environment": record["environment"],
+    }
+
+
+def scaled(
+    train_df: pd.DataFrame, val_df: pd.DataFrame, tokenizer: DistilBertTokenizerFast, weighted: bool = True
+) -> None:
+    """Fine-tune on 10,000 loans, keep the best epoch, and write the slim report to REPORT_DIR.
+
+    Args:
+        weighted: Use class-weighted loss; False is the comparison run, saved under *_unweighted names.
+    """
+    name = "distilbert_10k" if weighted else "distilbert_10k_unweighted"
+    record = fine_tune(
+        SCALED, train_df, val_df, tokenizer, SCALED_VAL_ROWS, MODEL_DIR.with_name(name),
+        class_weighted=weighted, keep_best_epoch=True,
+    )
+    report = slim_report(record)
+    best = report["validation"]
+    verdict = target_verdict(best["roc_auc"], best["roc_auc_ci_low"])
+    report["roc_auc_target"] = {"target": ROC_AUC_TARGET, "verdict": verdict}
+    path = REPORT_DIR / f"{name}_metrics.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+    print(
+        f"{verdict}: best epoch {report['best_epoch']} ROC-AUC {best['roc_auc']:.4f}, "
+        f"{CONFIDENCE:.0%} CI [{best['roc_auc_ci_low']:.4f}, {best['roc_auc_ci_high']:.4f}] "
+        f"vs target {ROC_AUC_TARGET} (1k prototype: 0.505). Saved report to {path}"
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--stage", choices=["overfit", "prototype", "all"], default="all")
-    stage = parser.parse_args().stage
+    parser.add_argument("--stage", choices=["overfit", "prototype", "scaled", "all"], default="all")
+    parser.add_argument("--unweighted", action="store_true", help="With --stage scaled: the unweighted comparison run")
+    args = parser.parse_args()
+    stage = args.stage
+    if args.unweighted and stage != "scaled":
+        parser.error("--unweighted only applies to --stage scaled")
 
     print(f"Device: {DEVICE_NAME} ({precision()})")
     tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_NAME)
@@ -293,6 +431,8 @@ def main() -> None:
         overfit(train_df, tokenizer)
     if stage in {"prototype", "all"}:
         prototype(train_df, load_original_split(DATA_DIR, "validation"), tokenizer)
+    if stage == "scaled":
+        scaled(train_df, load_original_split(DATA_DIR, "validation"), tokenizer, weighted=not args.unweighted)
 
 
 if __name__ == "__main__":
