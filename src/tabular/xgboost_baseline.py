@@ -29,6 +29,8 @@ sparse matrix as missing, which would silently turn one-hot zeros into NaN.
 
 from __future__ import annotations
 
+import argparse
+import json
 import platform
 import tomllib
 from dataclasses import dataclass
@@ -45,7 +47,7 @@ from sklearn.metrics import average_precision_score, brier_score_loss, log_loss,
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
-from src.tabular import development, evaluate, preprocess
+from src.tabular import development, evaluate, logistic_baseline, preprocess
 
 MODEL_NAME = "xgboost"
 REPO_ROOT = preprocess.REPO_ROOT
@@ -65,6 +67,8 @@ METRIC_FUNCTIONS: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
     "log_loss": lambda y_true, y_pred: log_loss(y_true, y_pred, labels=[0, 1]),
 }
 CONFIDENCE_LEVEL = 0.95
+ABLATION_METRICS = ("roc_auc", "pr_auc")
+REFERENCE_VARIANT = "all"
 
 
 @dataclass(frozen=True)
@@ -292,3 +296,226 @@ def environment() -> dict[str, str]:
         "scikit_learn": sklearn.__version__,
         "xgboost": xgboost.__version__,
     }
+
+
+def _cv_record(result: CrossValidationResult) -> dict[str, Any]:
+    """JSON-ready summary and per-fold metrics of one cross-validation run."""
+    return {"summary": result.summary, "folds": list(result.fold_metrics)}
+
+
+def _paired_deltas(
+    target: pd.Series,
+    baseline: CrossValidationResult,
+    candidate: CrossValidationResult,
+    metrics: tuple[str, ...],
+    evaluation: dict[str, Any],
+) -> dict[str, dict[str, float]]:
+    """Paired bootstrap deltas (candidate - baseline) on the pooled out-of-fold rows."""
+    rows = candidate.oof_predictions.index
+    if not baseline.oof_predictions.index.equals(rows):
+        raise ValueError("Compared models were not scored on the same out-of-fold rows")
+    return {
+        metric: paired_bootstrap_delta(
+            target.loc[rows].to_numpy(),
+            baseline.oof_predictions.to_numpy(),
+            candidate.oof_predictions.to_numpy(),
+            metric,
+            resamples=evaluation["bootstrap_resamples"],
+            seed=evaluation["seed"],
+        )
+        for metric in metrics
+    }
+
+
+def compare_default_with_logistic(
+    features: pd.DataFrame,
+    target: pd.Series,
+    folds: tuple[Fold, ...],
+    feature_config: dict[str, Any],
+    xgboost_config: dict[str, Any],
+    logistic_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Task 1: default XGBoost and the unchanged logistic pipeline on the same folds and rows."""
+    logistic = cross_validate(
+        lambda: logistic_baseline.build_pipeline(feature_config, logistic_config),
+        features, target, folds,
+    )
+    challenger = cross_validate(
+        lambda: build_xgboost_pipeline(feature_config, xgboost_config["model"]),
+        features, target, folds,
+    )
+    return {
+        "logistic_regression": _cv_record(logistic),
+        "xgboost_default": _cv_record(challenger),
+        "xgboost_minus_logistic": _paired_deltas(
+            target, logistic, challenger, SUMMARY_METRICS, xgboost_config["evaluation"]
+        ),
+    }
+
+
+def _ablation_row(
+    variant: str,
+    removed: list[str],
+    variant_config: dict[str, Any],
+    result: CrossValidationResult,
+    reference: CrossValidationResult,
+    deltas: dict[str, dict[str, float]],
+) -> dict[str, Any]:
+    """One CSV row: the variant's fold mean/std and its change against the all-feature model."""
+    row: dict[str, Any] = {
+        "variant": variant,
+        "removed_features": ";".join(removed),
+        "n_features": len(variant_config["model"]["numeric"])
+        + len(variant_config["model"]["categorical"]),
+    }
+    for metric in ABLATION_METRICS:
+        row[f"{metric}_mean"] = result.summary[metric]["mean"]
+        row[f"{metric}_std"] = result.summary[metric]["std"]
+        row[f"delta_{metric}"] = result.summary[metric]["mean"] - reference.summary[metric]["mean"]
+        row[f"delta_{metric}_pooled"] = deltas[metric]["delta"]
+        row[f"delta_{metric}_ci_low"] = deltas[metric]["ci_low"]
+        row[f"delta_{metric}_ci_high"] = deltas[metric]["ci_high"]
+    return row
+
+
+def run_feature_ablation_on(
+    features: pd.DataFrame,
+    target: pd.Series,
+    folds: tuple[Fold, ...],
+    feature_config: dict[str, Any],
+    ablation_config: dict[str, Any],
+    xgboost_config: dict[str, Any],
+) -> pd.DataFrame:
+    """Task 2: the default XGBoost with all features, then without each family in turn.
+
+    delta_* is the change in fold-mean metric against the all-feature model
+    (negative = the family helped). The CI is a paired bootstrap of the
+    pooled out-of-fold difference; a CI spanning 0 is no detectable effect.
+    """
+    feature_sets = development.get_ablation_feature_sets(feature_config, ablation_config)
+    params = xgboost_config["model"]
+    results = {
+        name: cross_validate(
+            lambda variant=variant: build_xgboost_pipeline(variant, params),
+            features, target, folds,
+        )
+        for name, variant in feature_sets.items()
+    }
+    reference = results[REFERENCE_VARIANT]
+    rows = []
+    for name, result in results.items():
+        family = name.removeprefix("without_")
+        removed = [] if name == REFERENCE_VARIANT else ablation_config["families"][family]["features"]
+        deltas = _paired_deltas(
+            target, reference, result, ABLATION_METRICS, xgboost_config["evaluation"]
+        )
+        rows.append(_ablation_row(name, removed, feature_sets[name], result, reference, deltas))
+    return pd.DataFrame(rows)
+
+
+def run_metadata(
+    data_dir: str | Path, xgboost_config: dict[str, Any], folds: tuple[Fold, ...]
+) -> dict[str, Any]:
+    """Provenance written beside every result: versions, folds, seed and the test-row count."""
+    _, stats = evaluate.load_manifest(data_dir)
+    return {
+        "model_version": xgboost_config["model_version"],
+        "dataset_version": stats["dataset_version"],
+        "split_version": stats.get("split_version"),
+        "cohort": stats["cohort"],
+        "training_rows": "model_fit role only",
+        "test_rows_available_to_model": count_test_rows_available(data_dir),
+        "cv": {**xgboost_config["cv"], "folds": describe_folds(folds)},
+        "evaluation": xgboost_config["evaluation"],
+        "environment": environment(),
+    }
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def run_default_comparison(
+    data_dir: str | Path,
+    raw_csv_path: str | Path,
+    output_dir: str | Path,
+    *,
+    xgboost_config_path: str | Path = DEFAULT_XGBOOST_CONFIG,
+    logistic_config_path: str | Path = logistic_baseline.DEFAULT_LOGISTIC_CONFIG,
+) -> dict[str, Any]:
+    """Load model_fit, run Task 1 and write xgboost_default_comparison.json."""
+    xgboost_config = load_xgboost_config(xgboost_config_path)
+    logistic_config = logistic_baseline.load_logistic_config(logistic_config_path)
+    feature_config = preprocess.load_feature_config()
+    features, target, issue_month = load_model_fit(data_dir, raw_csv_path)
+    folds = build_folds(issue_month, xgboost_config)
+    report = {
+        **run_metadata(data_dir, xgboost_config, folds),
+        "xgboost_params": xgboost_config["model"],
+        "logistic_params": logistic_config["model"],
+        "note": (
+            "The logistic pipeline keeps its approved class_weight='balanced', which "
+            "inflates its raw probabilities; compare Brier and log loss only after calibration."
+        ),
+        **compare_default_with_logistic(
+            features, target, folds, feature_config, xgboost_config, logistic_config
+        ),
+    }
+    _write_json(Path(output_dir) / "xgboost_default_comparison.json", report)
+    return report
+
+
+def run_feature_ablation(
+    data_dir: str | Path,
+    raw_csv_path: str | Path,
+    output_dir: str | Path,
+    *,
+    xgboost_config_path: str | Path = DEFAULT_XGBOOST_CONFIG,
+) -> pd.DataFrame:
+    """Load model_fit, run Task 2 and write xgboost_ablation_results.csv (+ provenance JSON)."""
+    xgboost_config = load_xgboost_config(xgboost_config_path)
+    feature_config = preprocess.load_feature_config()
+    ablation_config = development.load_ablation_config(feature_config=feature_config)
+    features, target, issue_month = load_model_fit(data_dir, raw_csv_path)
+    folds = build_folds(issue_month, xgboost_config)
+    results = run_feature_ablation_on(
+        features, target, folds, feature_config, ablation_config, xgboost_config
+    )
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    results.to_csv(output_dir / "xgboost_ablation_results.csv", index=False)
+    _write_json(output_dir / "xgboost_ablation_metadata.json", {
+        **run_metadata(data_dir, xgboost_config, folds),
+        "ablation_version": ablation_config["ablation_version"],
+        "xgboost_params": xgboost_config["model"],
+    })
+    return results
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="XGBoost challenger experiments on model_fit rows.")
+    parser.add_argument("command", choices=["compare", "ablate"])
+    parser.add_argument("--data-dir", default=preprocess.DEFAULT_DATA_DIR, type=Path)
+    parser.add_argument("--raw-csv", default=preprocess.DEFAULT_RAW_CSV, type=Path)
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, type=Path)
+    parser.add_argument("--xgboost-config", default=DEFAULT_XGBOOST_CONFIG, type=Path)
+    args = parser.parse_args()
+    if args.command == "compare":
+        report = run_default_comparison(
+            args.data_dir, args.raw_csv, args.output_dir, xgboost_config_path=args.xgboost_config
+        )
+        print(json.dumps({
+            "logistic_regression": report["logistic_regression"]["summary"],
+            "xgboost_default": report["xgboost_default"]["summary"],
+            "xgboost_minus_logistic": report["xgboost_minus_logistic"],
+        }, indent=2))
+    else:
+        results = run_feature_ablation(
+            args.data_dir, args.raw_csv, args.output_dir, xgboost_config_path=args.xgboost_config
+        )
+        print(results.to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
