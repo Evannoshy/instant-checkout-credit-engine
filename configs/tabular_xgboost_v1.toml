@@ -1,8 +1,5 @@
 model_version = "tabular-xgboost-v1"
 status = "proposed"
-feature_config = "configs/tabular_features_v1.toml"
-development_config = "configs/tabular_development_v1.toml"
-ablation_config = "configs/tabular_ablation_v1.toml"
 
 # Conservative default (Task 1). No class weighting, so raw probabilities stay
 # near prevalence for the calibration step; no early stopping, so a run needs
