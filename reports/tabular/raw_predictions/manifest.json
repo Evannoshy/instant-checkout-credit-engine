@@ -23,8 +23,8 @@
       "rows": 26940,
       "expected_rows": 26940,
       "missing_ids": 0,
-      "min_probability": 0.06448807780718568,
-      "max_probability": 0.9000723670246956,
+      "min_probability": 0.06448807780715621,
+      "max_probability": 0.9000723670246689,
       "raw_metrics": {
         "rows": 26940,
         "positives": 4090,
@@ -33,11 +33,11 @@
         "roc_auc_baseline": 0.5,
         "pr_auc": 0.2542941599379812,
         "pr_auc_baseline": 0.151818856718634,
-        "brier_score": 0.23788059662140307,
-        "log_loss": 0.6698062265628798,
+        "brier_score": 0.23788059662135724,
+        "log_loss": 0.6698062265627824,
         "f1_at_0.5": 0.3263376084985102,
         "f1_best": 0.33187333955625764,
-        "f1_best_threshold": 0.5207937926526943
+        "f1_best_threshold": 0.5207937926525726
       }
     },
     "logistic_regression_validation.csv": {
@@ -52,8 +52,8 @@
       "rows": 21784,
       "expected_rows": 21784,
       "missing_ids": 0,
-      "min_probability": 0.0846216182756707,
-      "max_probability": 0.8856467070045888,
+      "min_probability": 0.08462161827566093,
+      "max_probability": 0.8856467070046774,
       "raw_metrics": {
         "rows": 21784,
         "positives": 3298,
@@ -62,11 +62,11 @@
         "roc_auc_baseline": 0.5,
         "pr_auc": 0.2575375225373021,
         "pr_auc_baseline": 0.15139551964744766,
-        "brier_score": 0.2363088756916655,
-        "log_loss": 0.6665737985244483,
+        "brier_score": 0.23630887569162146,
+        "log_loss": 0.6665737985243545,
         "f1_at_0.5": 0.3332791416029914,
         "f1_best": 0.341846386681801,
-        "f1_best_threshold": 0.5349827113512095
+        "f1_best_threshold": 0.5349827113511507
       }
     },
     "xgboost_default_calibration.csv": {
@@ -89,21 +89,21 @@
       "rows": 26940,
       "expected_rows": 26940,
       "missing_ids": 0,
-      "min_probability": 0.01792973279953003,
-      "max_probability": 0.5449768304824829,
+      "min_probability": 0.016902707517147064,
+      "max_probability": 0.5681377053260803,
       "raw_metrics": {
         "rows": 26940,
         "positives": 4090,
         "prevalence": 0.151818856718634,
-        "roc_auc": 0.6640798660339302,
+        "roc_auc": 0.6625882950891591,
         "roc_auc_baseline": 0.5,
-        "pr_auc": 0.2546331036145225,
+        "pr_auc": 0.2536025039295444,
         "pr_auc_baseline": 0.151818856718634,
-        "brier_score": 0.12300353846204479,
-        "log_loss": 0.40397711086957366,
+        "brier_score": 0.12311862198672405,
+        "log_loss": 0.4043893418376867,
         "f1_at_0.5": 0.0,
-        "f1_best": 0.3313922710428798,
-        "f1_best_threshold": 0.1727493554353714
+        "f1_best": 0.3308970099667774,
+        "f1_best_threshold": 0.16983334720134735
       }
     },
     "xgboost_default_validation.csv": {
@@ -126,21 +126,21 @@
       "rows": 21784,
       "expected_rows": 21784,
       "missing_ids": 0,
-      "min_probability": 0.015117361210286617,
-      "max_probability": 0.5566695928573608,
+      "min_probability": 0.014107855036854744,
+      "max_probability": 0.5116134881973267,
       "raw_metrics": {
         "rows": 21784,
         "positives": 3298,
         "prevalence": 0.15139551964744766,
-        "roc_auc": 0.6645456689988857,
+        "roc_auc": 0.6659724120795656,
         "roc_auc_baseline": 0.5,
-        "pr_auc": 0.2565176199327911,
+        "pr_auc": 0.2563701539117795,
         "pr_auc_baseline": 0.15139551964744766,
-        "brier_score": 0.12256593876714894,
-        "log_loss": 0.4032819986851988,
+        "brier_score": 0.12245978739190294,
+        "log_loss": 0.4028914251040795,
         "f1_at_0.5": 0.0012117540139351712,
-        "f1_best": 0.33999122036874446,
-        "f1_best_threshold": 0.1924598217010498
+        "f1_best": 0.3407798537774167,
+        "f1_best_threshold": 0.1821688413619995
       }
     },
     "xgboost_trial1_calibration.csv": {
@@ -163,21 +163,21 @@
       "rows": 26940,
       "expected_rows": 26940,
       "missing_ids": 0,
-      "min_probability": 0.030381925404071808,
-      "max_probability": 0.46786510944366455,
+      "min_probability": 0.030774034559726715,
+      "max_probability": 0.48097947239875793,
       "raw_metrics": {
         "rows": 26940,
         "positives": 4090,
         "prevalence": 0.151818856718634,
-        "roc_auc": 0.6616385216651598,
+        "roc_auc": 0.6612854643604243,
         "roc_auc_baseline": 0.5,
-        "pr_auc": 0.25442699635813887,
+        "pr_auc": 0.25411690101163953,
         "pr_auc_baseline": 0.151818856718634,
-        "brier_score": 0.12307932270964998,
-        "log_loss": 0.40465524500730643,
+        "brier_score": 0.12310262916386598,
+        "log_loss": 0.40473833817753946,
         "f1_at_0.5": 0.0,
-        "f1_best": 0.33028470275851896,
-        "f1_best_threshold": 0.16757676005363464
+        "f1_best": 0.3305142857142857,
+        "f1_best_threshold": 0.17172330617904663
       }
     },
     "xgboost_trial1_validation.csv": {
@@ -200,29 +200,34 @@
       "rows": 21784,
       "expected_rows": 21784,
       "missing_ids": 0,
-      "min_probability": 0.030041111633181572,
-      "max_probability": 0.47984379529953003,
+      "min_probability": 0.030672285705804825,
+      "max_probability": 0.49338391423225403,
       "raw_metrics": {
         "rows": 21784,
         "positives": 3298,
         "prevalence": 0.15139551964744766,
-        "roc_auc": 0.6664404534872637,
+        "roc_auc": 0.66608740904152,
         "roc_auc_baseline": 0.5,
-        "pr_auc": 0.25898729920544733,
+        "pr_auc": 0.2583793795388654,
         "pr_auc_baseline": 0.15139551964744766,
-        "brier_score": 0.12237505900900135,
-        "log_loss": 0.402874295042044,
+        "brier_score": 0.1224166998613578,
+        "log_loss": 0.4030212075657436,
         "f1_at_0.5": 0.0,
-        "f1_best": 0.34208350558081857,
-        "f1_best_threshold": 0.180852010846138
+        "f1_best": 0.3416693046322676,
+        "f1_best_threshold": 0.18431569635868073
       }
     }
   },
   "environment": {
-    "python": "3.13.9",
-    "pandas": "2.3.3",
-    "numpy": "2.3.5",
-    "scikit_learn": "1.7.2",
-    "xgboost": "3.4.1"
+    "python": "3.13.15",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "pyarrow": "23.0.1",
+    "platform": "Windows",
+    "machine": "AMD64"
   }
 }
