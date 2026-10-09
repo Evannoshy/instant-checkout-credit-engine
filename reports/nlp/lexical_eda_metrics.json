@@ -1,0 +1,52 @@
+{
+  "analysis_split": "train",
+  "analysis_version": "nlp-lexical-eda-v1",
+  "defaults": 13197,
+  "empirical_default_rate": 0.1529324510678734,
+  "keyword_artifact": {
+    "description_distress_mention_rate": 0.054013651165216184,
+    "medical_purpose": {
+      "defaults": 139,
+      "desc_distress_mention_rate": 0.5618374558303887,
+      "description_distress_hits": 633,
+      "empirical_default_rate": 0.16372202591283863,
+      "mean_desc_distress_keyword_density": 0.052476485349026485,
+      "mean_distress_keyword_density": 0.09356624852260138,
+      "mean_reading_ease": 46.039534227174684,
+      "mean_reading_grade": 8.938815456056663,
+      "n_loans": 849,
+      "payload_distress_hits": 1970,
+      "payload_distress_mention_rate": 1.0,
+      "purpose": "medical",
+      "purpose_label_distress_hits": 849,
+      "purpose_label_only_hit_rate": 0.4381625441696113,
+      "purpose_label_share_of_payload_hits": 0.4309644670050761,
+      "title_distress_hits": 488
+    },
+    "payload_distress_mention_rate": 0.05961086067236045,
+    "purpose_categories_with_distress_label_hits": [
+      "medical"
+    ],
+    "purpose_label_only_hit_rate": 0.00431089427879434,
+    "purpose_label_share_of_all_payload_hits": 0.11609462600847806
+  },
+  "provenance": {
+    "actual_archive_sha256": "e5de55438920e393443d6212946cd6a0954664e952cdb3683c5607c8beb192f1",
+    "archive_matches": false,
+    "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+    "expected_archive_sha256": "c6255f6a8099b25303360976597fd8f86ae9087176598692a5a37dd8dc3339a1",
+    "expected_raw_csv_sha256": "23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c",
+    "manifest_sha256": "41686f71f2534616e565b5ea7b78873cd2222f5079b235c179942192ac898e48",
+    "preprocess_version": "nlp-preprocess-v1",
+    "raw_csv_matches": true,
+    "raw_csv_sha256": "23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c",
+    "split_version": "split-v1"
+  },
+  "purpose_categories": 14,
+  "strongest_feature": {
+    "absolute_r": 0.020667692680760994,
+    "feature": "sentiment_polarity",
+    "point_biserial_r": -0.020667692680760994
+  },
+  "training_rows": 86293
+}

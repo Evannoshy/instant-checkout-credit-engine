@@ -1,0 +1,36 @@
+ablation_version = "tabular_ablation_v1"
+feature_set_version = "tabular_features_v1"
+status = "proposed"
+
+# Feature families for ablation: each run removes one family from the model and
+# compares it with the model that keeps all nine features.
+#
+# Overlap check behind this grouping (model_fit rows, 59,353 loans):
+# home_ownership is linked more to income than to credit history length.
+# - Share of each feature's variance explained by housing type:
+#   annual_inc_log 0.105, credit_history_months 0.062.
+# - How well each predicts housing (McFadden pseudo-R^2):
+#   annual_inc_log + dti 0.061, credit_history_months 0.036.
+# Both links are modest: all eight other features together explain only about
+# 9% of housing, so most of its information is lost when it is removed,
+# whichever family it sits in.
+
+[families.loan_information]
+# The request, set by the purchase at checkout, not the borrower. Removing it
+# shows how much the model scores the purchase rather than the person.
+features = ["loan_amnt", "term"]
+
+[families.income_affordability]
+# Ability to repay. dti is debt / income, so the two leave together; home_ownership
+# joins because dti omits housing costs and it is closest to income (overlap check).
+features = ["annual_inc_log", "dti", "home_ownership"]
+
+[families.credit_behaviour]
+# Recent credit strain from the bureau: utilisation, missed payments, new applications.
+# Largest family, so part of its drop comes just from removing three features.
+features = ["revol_util", "delinq_2yrs", "inq_last_6mths"]
+
+[families.credit_history]
+# Credit age. Other features (e.g. home_ownership) cover part of it, so its drop is a
+# lower bound; report a paired bootstrap CI, and read one spanning 0 as no detectable effect.
+features = ["credit_history_months"]

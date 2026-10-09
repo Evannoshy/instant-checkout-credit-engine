@@ -1,0 +1,332 @@
+{
+  "model_version": "tabular-xgboost-v1",
+  "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+  "split_version": "split-v1",
+  "cohort": "real_text_matured_v1",
+  "training_rows": "model_fit role only",
+  "test_rows_available_to_model": 0,
+  "cv": {
+    "n_folds": 5,
+    "min_train_share": 0.4,
+    "folds": [
+      {
+        "fold": 0,
+        "train_rows": 24119,
+        "holdout_rows": 7022,
+        "holdout_first_month": "2011-11",
+        "holdout_last_month": "2012-03"
+      },
+      {
+        "fold": 1,
+        "train_rows": 31141,
+        "holdout_rows": 6033,
+        "holdout_first_month": "2012-04",
+        "holdout_last_month": "2012-06"
+      },
+      {
+        "fold": 2,
+        "train_rows": 37174,
+        "holdout_rows": 7095,
+        "holdout_first_month": "2012-07",
+        "holdout_last_month": "2012-08"
+      },
+      {
+        "fold": 3,
+        "train_rows": 44269,
+        "holdout_rows": 7883,
+        "holdout_first_month": "2012-09",
+        "holdout_last_month": "2012-10"
+      },
+      {
+        "fold": 4,
+        "train_rows": 52152,
+        "holdout_rows": 7201,
+        "holdout_first_month": "2012-11",
+        "holdout_last_month": "2012-12"
+      }
+    ]
+  },
+  "evaluation": {
+    "bootstrap_resamples": 1000,
+    "seed": 42
+  },
+  "environment": {
+    "python": "3.13.15",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "pyarrow": "23.0.1",
+    "platform": "Windows",
+    "machine": "AMD64"
+  },
+  "xgboost_params": {
+    "n_estimators": 300,
+    "max_depth": 3,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.0,
+    "tree_method": "hist",
+    "objective": "binary:logistic",
+    "n_jobs": 1,
+    "random_state": 42
+  },
+  "logistic_params": {
+    "C": 1.0,
+    "class_weight": "balanced",
+    "max_iter": 1000,
+    "random_state": 42
+  },
+  "note": "The logistic pipeline keeps its approved class_weight='balanced', which inflates its raw probabilities; compare Brier and log loss only after calibration.",
+  "logistic_regression": {
+    "summary": {
+      "roc_auc": {
+        "mean": 0.66293441974563,
+        "std": 0.01106443695394698
+      },
+      "pr_auc": {
+        "mean": 0.2725965629456912,
+        "std": 0.01690827132856318
+      },
+      "brier_score": {
+        "mean": 0.23655579892892353,
+        "std": 0.009110333348771316
+      },
+      "log_loss": {
+        "mean": 0.6671127827403385,
+        "std": 0.01982057119140617
+      }
+    },
+    "folds": [
+      {
+        "fold": 0,
+        "train_rows": 24119,
+        "holdout_first_month": "2011-11",
+        "holdout_last_month": "2012-03",
+        "rows": 7022,
+        "positives": 1182,
+        "prevalence": 0.16832811164910283,
+        "roc_auc": 0.6688104095681803,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.27900777709065644,
+        "pr_auc_baseline": 0.16832811164910283,
+        "brier_score": 0.25007353145768746,
+        "log_loss": 0.6962646075530081,
+        "f1_at_0.5": 0.3531236154186974,
+        "f1_best": 0.3690637720488467,
+        "f1_best_threshold": 0.5494558753745261
+      },
+      {
+        "fold": 1,
+        "train_rows": 31141,
+        "holdout_first_month": "2012-04",
+        "holdout_last_month": "2012-06",
+        "rows": 6033,
+        "positives": 1003,
+        "prevalence": 0.16625227913144372,
+        "roc_auc": 0.678481454245613,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2991408023517752,
+        "pr_auc_baseline": 0.16625227913144372,
+        "brier_score": 0.22643370192889703,
+        "log_loss": 0.6449089466897074,
+        "f1_at_0.5": 0.3595238095238095,
+        "f1_best": 0.3645461043602573,
+        "f1_best_threshold": 0.5356099983219231
+      },
+      {
+        "fold": 2,
+        "train_rows": 37174,
+        "holdout_first_month": "2012-07",
+        "holdout_last_month": "2012-08",
+        "rows": 7095,
+        "positives": 1164,
+        "prevalence": 0.16405919661733614,
+        "roc_auc": 0.649786403896818,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2661548011525563,
+        "pr_auc_baseline": 0.16405919661733614,
+        "brier_score": 0.23075643077866534,
+        "log_loss": 0.6545210411305317,
+        "f1_at_0.5": 0.3342790817642507,
+        "f1_best": 0.3394957983193277,
+        "f1_best_threshold": 0.487256945544027
+      },
+      {
+        "fold": 3,
+        "train_rows": 44269,
+        "holdout_first_month": "2012-09",
+        "holdout_last_month": "2012-10",
+        "rows": 7883,
+        "positives": 1247,
+        "prevalence": 0.15818850691361158,
+        "roc_auc": 0.6605775500743678,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2609008103542725,
+        "pr_auc_baseline": 0.15818850691361158,
+        "brier_score": 0.23548994410320348,
+        "log_loss": 0.6647335528265752,
+        "f1_at_0.5": 0.34360452227887384,
+        "f1_best": 0.34494117647058825,
+        "f1_best_threshold": 0.5110927114554557
+      },
+      {
+        "fold": 4,
+        "train_rows": 52152,
+        "holdout_first_month": "2012-11",
+        "holdout_last_month": "2012-12",
+        "rows": 7201,
+        "positives": 1142,
+        "prevalence": 0.1585890848493265,
+        "roc_auc": 0.6570162809431714,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.25777862377919536,
+        "pr_auc_baseline": 0.1585890848493265,
+        "brier_score": 0.24002538637616438,
+        "log_loss": 0.6751357655018699,
+        "f1_at_0.5": 0.33468414779499406,
+        "f1_best": 0.3396717895285231,
+        "f1_best_threshold": 0.5193566789296524
+      }
+    ]
+  },
+  "xgboost_default": {
+    "summary": {
+      "roc_auc": {
+        "mean": 0.6598909211299931,
+        "std": 0.010133273605398885
+      },
+      "pr_auc": {
+        "mean": 0.2685153569531974,
+        "std": 0.013922214687840091
+      },
+      "brier_score": {
+        "mean": 0.1304630998705792,
+        "std": 0.0023854085295121636
+      },
+      "log_loss": {
+        "mean": 0.4232608861017139,
+        "std": 0.0056907158365116315
+      }
+    },
+    "folds": [
+      {
+        "fold": 0,
+        "train_rows": 24119,
+        "holdout_first_month": "2011-11",
+        "holdout_last_month": "2012-03",
+        "rows": 7022,
+        "positives": 1182,
+        "prevalence": 0.16832811164910283,
+        "roc_auc": 0.6688041802841712,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2784770069140863,
+        "pr_auc_baseline": 0.16832811164910283,
+        "brier_score": 0.13311641125574172,
+        "log_loss": 0.42901121181076896,
+        "f1_at_0.5": 0.003355704697986577,
+        "f1_best": 0.36369119420989143,
+        "f1_best_threshold": 0.17923453450202942
+      },
+      {
+        "fold": 1,
+        "train_rows": 31141,
+        "holdout_first_month": "2012-04",
+        "holdout_last_month": "2012-06",
+        "rows": 6033,
+        "positives": 1003,
+        "prevalence": 0.16625227913144372,
+        "roc_auc": 0.6709152859512912,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.28699830965245876,
+        "pr_auc_baseline": 0.16625227913144372,
+        "brier_score": 0.1316420877438841,
+        "log_loss": 0.4252608436398198,
+        "f1_at_0.5": 0.0,
+        "f1_best": 0.35692478490147095,
+        "f1_best_threshold": 0.13566015660762787
+      },
+      {
+        "fold": 2,
+        "train_rows": 37174,
+        "holdout_first_month": "2012-07",
+        "holdout_last_month": "2012-08",
+        "rows": 7095,
+        "positives": 1164,
+        "prevalence": 0.16405919661733614,
+        "roc_auc": 0.6488892741904178,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2653940396852692,
+        "pr_auc_baseline": 0.16405919661733614,
+        "brier_score": 0.13161513691250795,
+        "log_loss": 0.4271813482208757,
+        "f1_at_0.5": 0.003427592116538132,
+        "f1_best": 0.3376770538243626,
+        "f1_best_threshold": 0.16055379807949066
+      },
+      {
+        "fold": 3,
+        "train_rows": 44269,
+        "holdout_first_month": "2012-09",
+        "holdout_last_month": "2012-10",
+        "rows": 7883,
+        "positives": 1247,
+        "prevalence": 0.15818850691361158,
+        "roc_auc": 0.6603619633473562,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.25728221413734437,
+        "pr_auc_baseline": 0.15818850691361158,
+        "brier_score": 0.12743165990814515,
+        "log_loss": 0.4153044595433885,
+        "f1_at_0.5": 0.0016,
+        "f1_best": 0.33630748112560055,
+        "f1_best_threshold": 0.15738464891910553
+      },
+      {
+        "fold": 4,
+        "train_rows": 52152,
+        "holdout_first_month": "2012-11",
+        "holdout_last_month": "2012-12",
+        "rows": 7201,
+        "positives": 1142,
+        "prevalence": 0.1585890848493265,
+        "roc_auc": 0.6504839018767294,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.25442521437682813,
+        "pr_auc_baseline": 0.1585890848493265,
+        "brier_score": 0.12851020353261697,
+        "log_loss": 0.4195465672937166,
+        "f1_at_0.5": 0.001736111111111111,
+        "f1_best": 0.3355048859934854,
+        "f1_best_threshold": 0.16764134168624878
+      }
+    ]
+  },
+  "xgboost_minus_logistic": {
+    "roc_auc": {
+      "delta": -0.003260140997312977,
+      "ci_low": -0.006191769450784657,
+      "ci_high": -8.849010360276801e-05
+    },
+    "pr_auc": {
+      "delta": -0.0038376368666956373,
+      "ci_low": -0.008298637248872498,
+      "ci_high": 0.00036410856195784937
+    },
+    "brier_score": {
+      "delta": -0.10647109247836359,
+      "ci_low": -0.10902909486925481,
+      "ci_high": -0.10366042298721573
+    },
+    "log_loss": {
+      "delta": -0.24469299058989208,
+      "ci_low": -0.25116393959929556,
+      "ci_high": -0.23767507060918835
+    }
+  }
+}
