@@ -10,7 +10,13 @@ import pandas as pd
 import pytest
 from transformers import DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizerFast, set_seed
 
-from src.nlp.export_distilbert_scores import OUTPUTS, PROBABILITY_COLUMN, score
+from src.nlp.export_distilbert_scores import (
+    HOLDOUT_MODEL_VERSION,
+    MODEL_VERSION,
+    OUTPUTS,
+    PROBABILITY_COLUMN,
+    score,
+)
 from src.nlp.train_distilbert_prototype import SCALED
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -47,17 +53,17 @@ def test_score_returns_rows_in_input_order_despite_length_sorting():
 
 
 @pytest.mark.parametrize(
-    ("split", "id_file", "seen_in_training"),
+    ("split", "id_file", "holdout_scored"),
     [("train", "train_ids.csv", SCALED.train_rows), ("validation", "val_ids.csv", 0)],
 )
-def test_exported_parquet_matches_frozen_ids(split, id_file, seen_in_training):
+def test_exported_parquet_matches_frozen_ids(split, id_file, holdout_scored):
     """The Parquet artifact matches the frozen IDs in order, with no NaNs, duplicates or test loans."""
     actual = pd.read_parquet(DATA_DIR / "nlp" / OUTPUTS[split])
     expected_ids = pd.read_csv(DATA_DIR / id_file, dtype={"loan_id": "string"})["loan_id"]
     test_ids = pd.read_csv(DATA_DIR / "test_ids.csv", dtype={"loan_id": "string"})["loan_id"]
 
     assert actual.columns.tolist() == [
-        "loan_id", "split", PROBABILITY_COLUMN, "model_name", "model_version", "in_distilbert_train"
+        "loan_id", "split", PROBABILITY_COLUMN, "model_name", "model_version"
     ]
     pd.testing.assert_series_equal(actual["loan_id"].astype("string"), expected_ids)
     assert actual["split"].eq(split).all()
@@ -65,4 +71,6 @@ def test_exported_parquet_matches_frozen_ids(split, id_file, seen_in_training):
     assert actual.notna().all().all()
     assert actual[PROBABILITY_COLUMN].between(0, 1).all()
     assert not actual["loan_id"].isin(test_ids).any()
-    assert actual["in_distilbert_train"].sum() == seen_in_training
+    # The main model's 10,000 training loans are scored by the holdout model instead.
+    assert actual["model_version"].isin([MODEL_VERSION, HOLDOUT_MODEL_VERSION]).all()
+    assert actual["model_version"].eq(HOLDOUT_MODEL_VERSION).sum() == holdout_scored
