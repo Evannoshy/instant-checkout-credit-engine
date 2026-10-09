@@ -1,7 +1,7 @@
 """DistilBERT Training Prototype.
 
 Run from the repository root:
-    python -m src.nlp.train_distilbert_prototype [--stage overfit|prototype|scaled|all] [--unweighted]
+    python -m src.nlp.train_distilbert_prototype [--stage overfit|prototype|scaled|all] [--unweighted | --holdout]
 
 Stage 1 (overfit): train on 100 loans for 10 epochs and stop unless the loss
 reaches ~0 and the optimizer actually updates the weights.
@@ -11,7 +11,8 @@ models/distilbert_prototype/.
 Stage 3 (scaled, not part of "all"): fine-tune on 10,000 train loans for 3 epochs
 with class-weighted loss (--unweighted for the comparison run), evaluate on 5,000
 validation loans, keep the epoch with the best ROC-AUC in models/distilbert_10k/,
-and write reports/nlp/distilbert_10k_metrics.json.
+and write reports/nlp/distilbert_10k_metrics.json. --holdout trains the same model on
+10,000 loans distilbert_10k never saw, so the export can score every train loan without leakage.
 """
 
 from __future__ import annotations
@@ -387,14 +388,23 @@ def slim_report(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def scaled(
-    train_df: pd.DataFrame, val_df: pd.DataFrame, tokenizer: DistilBertTokenizerFast, weighted: bool = True
+    train_df: pd.DataFrame,
+    val_df: pd.DataFrame,
+    tokenizer: DistilBertTokenizerFast,
+    weighted: bool = True,
+    holdout: bool = False,
 ) -> None:
     """Fine-tune on 10,000 loans, keep the best epoch, and write the slim report to REPORT_DIR.
 
     Args:
         weighted: Use class-weighted loss; False is the comparison run, saved under *_unweighted names.
+        holdout: Train on 10,000 loans distilbert_10k never saw, so it can score that model's
+            training loans without leakage; saved under *_holdout names.
     """
-    name = "distilbert_10k" if weighted else "distilbert_10k_unweighted"
+    name = "distilbert_10k_holdout" if holdout else "distilbert_10k" if weighted else "distilbert_10k_unweighted"
+    if holdout:
+        main_run = json.loads((MODEL_DIR.with_name("distilbert_10k") / "metrics.json").read_text(encoding="utf-8"))
+        train_df = train_df[~train_df["loan_id"].isin(main_run["sample_loan_ids"]["train"])]
     record = fine_tune(
         SCALED, train_df, val_df, tokenizer, SCALED_VAL_ROWS, MODEL_DIR.with_name(name),
         class_weighted=weighted, keep_best_epoch=True,
@@ -417,11 +427,13 @@ def scaled(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--stage", choices=["overfit", "prototype", "scaled", "all"], default="all")
-    parser.add_argument("--unweighted", action="store_true", help="With --stage scaled: the unweighted comparison run")
+    variant = parser.add_mutually_exclusive_group()
+    variant.add_argument("--unweighted", action="store_true", help="With --stage scaled: the unweighted comparison run")
+    variant.add_argument("--holdout", action="store_true", help="With --stage scaled: train on loans distilbert_10k never saw")
     args = parser.parse_args()
     stage = args.stage
-    if args.unweighted and stage != "scaled":
-        parser.error("--unweighted only applies to --stage scaled")
+    if (args.unweighted or args.holdout) and stage != "scaled":
+        parser.error("--unweighted and --holdout only apply to --stage scaled")
 
     print(f"Device: {DEVICE_NAME} ({precision()})")
     tokenizer = DistilBertTokenizerFast.from_pretrained(MODEL_NAME)
@@ -432,7 +444,10 @@ def main() -> None:
     if stage in {"prototype", "all"}:
         prototype(train_df, load_original_split(DATA_DIR, "validation"), tokenizer)
     if stage == "scaled":
-        scaled(train_df, load_original_split(DATA_DIR, "validation"), tokenizer, weighted=not args.unweighted)
+        scaled(
+            train_df, load_original_split(DATA_DIR, "validation"), tokenizer,
+            weighted=not args.unweighted, holdout=args.holdout,
+        )
 
 
 if __name__ == "__main__":

@@ -301,3 +301,16 @@ def test_scaled_saves_the_best_epoch_and_a_slim_report(small_scaled, tokenizer, 
     trainer = proto.build_trainer(proto.SCALED, saved, tokenizer, train_ds, val_ds, small_scaled, class_weighted=weighted)
     assert trainer.evaluate()["eval_loss"] == pytest.approx(best["loss"])
     assert best["loss"] != pytest.approx(epochs[-1]["loss"])
+
+
+def test_holdout_trains_only_on_loans_the_main_model_never_saw(small_scaled, tokenizer, loans):
+    """The holdout model trains on a full sample that shares no loan with the main model's."""
+    proto.scaled(loans, loans, tokenizer)
+    proto.scaled(loans, loans, tokenizer, holdout=True)
+    main_ids, holdout_ids = (
+        set(json.loads((small_scaled / "models" / name / "metrics.json").read_text(encoding="utf-8"))["sample_loan_ids"]["train"])
+        for name in ("distilbert_10k", "distilbert_10k_holdout")
+    )
+    assert len(holdout_ids) == proto.SCALED.train_rows
+    assert not main_ids & holdout_ids
+    assert (small_scaled / "reports" / "distilbert_10k_holdout_metrics.json").exists()
