@@ -1,0 +1,114 @@
+{
+  "model_name": "distilbert-base-uncased",
+  "preprocess_version": "nlp-preprocess-v1",
+  "config": {
+    "train_rows": 10000,
+    "epochs": 3,
+    "learning_rate": 2e-05,
+    "lr_scheduler_type": "linear",
+    "logging_steps": 50,
+    "val_rows": 5000,
+    "batch_size": 16,
+    "max_length": 384,
+    "optimizer": "adamw_torch",
+    "weight_decay": 0.01,
+    "precision": "fp16",
+    "seed": 42,
+    "roc_auc_ci": {
+      "resamples": 1000,
+      "confidence": 0.95
+    },
+    "class_weights": [
+      1.0,
+      5.54022216796875
+    ]
+  },
+  "train": {
+    "rows": 10000,
+    "positives": 1529,
+    "steps": 1875,
+    "mean_loss": 0.6567307779947916,
+    "runtime_seconds": 101.3767
+  },
+  "best_epoch": 3,
+  "best_epoch_selected_by": "ROC-AUC on this validation sample (so slightly optimistic)",
+  "validation": {
+    "loss": 0.7152233719825745,
+    "rows": 5000,
+    "positives": 757,
+    "prevalence": 0.1514,
+    "pr_auc": 0.20071749774530892,
+    "pr_auc_baseline": 0.1514,
+    "roc_auc": 0.5794227558265989,
+    "roc_auc_baseline": 0.5,
+    "f1_at_0.5": 0.27456027456027454,
+    "f1_best": 0.2802577082374597,
+    "f1_best_threshold": 0.2853221595287323,
+    "roc_auc_ci_low": 0.5570293291114516,
+    "roc_auc_ci_high": 0.6004843491525385
+  },
+  "validation_by_epoch": [
+    {
+      "epoch": 1,
+      "loss": 0.6872887015342712,
+      "rows": 5000,
+      "positives": 757,
+      "prevalence": 0.1514,
+      "pr_auc": 0.204597354434208,
+      "pr_auc_baseline": 0.1514,
+      "roc_auc": 0.5672513372713345,
+      "roc_auc_baseline": 0.5,
+      "f1_at_0.5": 0.2642578816861495,
+      "f1_best": 0.2695356738391846,
+      "f1_best_threshold": 0.44568029046058655,
+      "roc_auc_ci_low": 0.543430764791151,
+      "roc_auc_ci_high": 0.5889964100980054
+    },
+    {
+      "epoch": 2,
+      "loss": 0.6870735287666321,
+      "rows": 5000,
+      "positives": 757,
+      "prevalence": 0.1514,
+      "pr_auc": 0.20276655498741497,
+      "pr_auc_baseline": 0.1514,
+      "roc_auc": 0.5786062738815132,
+      "roc_auc_baseline": 0.5,
+      "f1_at_0.5": 0.22910216718266255,
+      "f1_best": 0.27692307692307694,
+      "f1_best_threshold": 0.3180084228515625,
+      "roc_auc_ci_low": 0.5570357402533997,
+      "roc_auc_ci_high": 0.6001087417634882
+    },
+    {
+      "epoch": 3,
+      "loss": 0.7152233719825745,
+      "rows": 5000,
+      "positives": 757,
+      "prevalence": 0.1514,
+      "pr_auc": 0.20071749774530892,
+      "pr_auc_baseline": 0.1514,
+      "roc_auc": 0.5794227558265989,
+      "roc_auc_baseline": 0.5,
+      "f1_at_0.5": 0.27456027456027454,
+      "f1_best": 0.2802577082374597,
+      "f1_best_threshold": 0.2853221595287323,
+      "roc_auc_ci_low": 0.5570293291114516,
+      "roc_auc_ci_high": 0.6004843491525385
+    }
+  ],
+  "environment": {
+    "python": "3.12.3",
+    "torch": "2.9.0+cu128",
+    "transformers": "5.17.0",
+    "device": "NVIDIA TITAN RTX",
+    "peak_gpu_memory_gb": {
+      "allocated": 2.0827221870422363,
+      "reserved": 2.314453125
+    }
+  },
+  "roc_auc_target": {
+    "target": 0.53,
+    "verdict": "PASS"
+  }
+}
