@@ -1,10 +1,16 @@
-"""Calibration tests using the committed config and tiny, artificial data (no borrower data).
+"""Calibration tests using the committed config, tiny artificial data and the committed files.
 
-No test reads data/ or the committed prediction files: loading tests use a made-up
-manifest and prediction files in tmp_path, and calibrator tests use synthetic arrays.
+Most tests use made-up data: loading tests write a manifest and prediction files to
+tmp_path, and calibrator tests use synthetic arrays. The last section checks the
+committed evidence: the real prediction files load with the expected counts, and the
+committed results match a recomputation. The full recomputation (bootstrap included,
+about 90 seconds) runs only when CALIBRATION_RECOMPUTE is set. No test reads the raw CSV.
 
 From the repository root, show each check and its actual pytest result with:
     python -m pytest src/tabular/test_tabular_calibrate.py -v -s
+
+Include the full recomputation (PowerShell):
+    $env:CALIBRATION_RECOMPUTE = "1"; python -m pytest src/tabular/test_tabular_calibrate.py -v -s
 
 The -s flag shows print statements; -v shows each PASSED/FAILED result.
 """
@@ -13,6 +19,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +58,14 @@ from src.tabular.calibrate import (
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CALIBRATION_CONFIG = REPOSITORY_ROOT / "configs" / "tabular_calibration_v1.toml"
 DEVELOPMENT_CONFIG = REPOSITORY_ROOT / "configs" / "tabular_development_v1.toml"
+REAL_DATA_DIR = REPOSITORY_ROOT / "data"
+REAL_PREDICTION_DIR = REPOSITORY_ROOT / "reports" / "tabular" / "raw_predictions"
+REAL_OUTPUT_DIR = REPOSITORY_ROOT / "reports" / "tabular"
+EVIDENCE_FILES = ("calibration_metrics.json", "calibration_results.csv", "policy_curve.csv")
+
+# Hardcoded on purpose, from the split manifest and the development roles, so a changed
+# input file fails a test instead of being echoed back by it: (rows, defaults).
+REAL_COUNTS = {"calibration": (26_940, 4_090), "validation": (21_784, 3_298)}
 
 EPS = 1e-6
 FAST_RESAMPLES = 20  # enough to exercise the bootstrap; the real run uses the config's 1,000
@@ -731,3 +746,83 @@ def test_saved_metrics_agree_with_a_fresh_recomputation(
             assert len(row) == 1
             for metric in ("roc_auc", "pr_auc", "brier_score", "log_loss"):
                 assert row[metric].item() == pytest.approx(expected[metric], rel=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Committed evidence: real prediction files and reports/tabular outputs
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def real_candidates() -> dict[str, Candidate]:
+    """Allan's committed prediction files, loaded once for this section."""
+    return load_candidates(REAL_PREDICTION_DIR, REAL_DATA_DIR)
+
+
+def test_committed_candidates_load_with_the_expected_counts(
+    real_candidates: dict[str, Candidate],
+) -> None:
+    """Every committed candidate has 26,940 calibration (4,090 defaults) and 21,784 validation
+    (3,298 defaults) loans, aligned loan for loan across candidates."""
+    assert list(real_candidates) == list(CANDIDATES)
+    for candidate in real_candidates.values():
+        counts = {
+            set_name: (len(scores.y), int(scores.y.sum()))
+            for set_name, scores in candidate.sets.items()
+        }
+        assert counts == REAL_COUNTS, candidate.name
+    reference = real_candidates[CANDIDATES[0]].sets["validation"]
+    for candidate in real_candidates.values():
+        np.testing.assert_array_equal(candidate.sets["validation"].loan_ids, reference.loan_ids)
+
+
+def test_committed_results_match_recomputed_metrics(
+    real_candidates: dict[str, Candidate],
+) -> None:
+    """Every row of the committed calibration_results.csv equals a recomputation from the
+    committed prediction files (no bootstrap, so this runs in seconds)."""
+    config = load_calibration_config(CALIBRATION_CONFIG)
+    saved = pd.read_csv(REAL_OUTPUT_DIR / "calibration_results.csv")
+    assert len(saved) == len(CANDIDATES) * len(config["methods"]) * len(SETS)
+
+    for name, candidate in real_candidates.items():
+        calibration = candidate.sets["calibration"]
+        calibrators = fit_calibrators(
+            calibration.p, calibration.y, config["methods"], config["probability_clip"]
+        )
+        for method, calibrator in calibrators.items():
+            for set_name, scores in candidate.sets.items():
+                expected = calibrate.metric_row(scores.y, calibrator.transform(scores.p))
+                row = saved.query("candidate == @name and method == @method and set == @set_name")
+                assert len(row) == 1, (name, method, set_name)
+                assert row["model_version"].item() == candidate.model_version
+                for key, value in expected.items():
+                    assert row[key].item() == pytest.approx(value, rel=1e-12), (
+                        name, method, set_name, key,
+                    )
+
+
+@pytest.mark.skipif(
+    not os.environ.get("CALIBRATION_RECOMPUTE"),
+    reason="CALIBRATION_RECOMPUTE is not set (full rerun takes about 90 seconds)",
+)
+def test_committed_evidence_equals_a_fresh_recomputation(tmp_path: Path) -> None:
+    """A full rerun in the recorded environment reproduces the committed JSON and CSVs exactly."""
+    run_calibration(REAL_DATA_DIR, REAL_PREDICTION_DIR, tmp_path)
+    saved, fresh = (
+        json.loads((directory / EVIDENCE_FILES[0]).read_text(encoding="utf-8"))
+        for directory in (REAL_OUTPUT_DIR, tmp_path)
+    )
+    assert fresh["environment"] == saved["environment"], (
+        "Regenerate the committed evidence in the recorded environment before comparing"
+    )
+    assert set(fresh) == set(saved), (
+        f"Keys differ: only committed {sorted(set(saved) - set(fresh))}, "
+        f"only fresh {sorted(set(fresh) - set(saved))}; rerun python -m src.tabular.calibrate"
+    )
+    for key in saved:
+        assert fresh[key] == saved[key], key
+    for filename in EVIDENCE_FILES[1:]:
+        assert_frame_equal(
+            pd.read_csv(tmp_path / filename), pd.read_csv(REAL_OUTPUT_DIR / filename),
+            check_exact=True, obj=filename,
+        )

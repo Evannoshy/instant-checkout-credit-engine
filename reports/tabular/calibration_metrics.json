@@ -1,6 +1,5 @@
 {
   "calibration_version": "tabular_calibration_v1",
-  "status": "proposed",
   "development_version": "tabular_development_v1",
   "feature_set_version": "tabular_features_v1",
   "dataset_version": "kaggle-adarshsng-local-2026-09-09",
