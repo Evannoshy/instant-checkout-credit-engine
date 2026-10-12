@@ -92,7 +92,7 @@ CANDIDATE_COLOURS = {
 
 REQUIRED_KEYS = {
     "": {
-        "calibration_version", "status", "development_version", "prediction_dir", "methods",
+        "calibration_version", "development_version", "prediction_dir", "methods",
         "probability_clip", "calibration_plot_bins", "calibration_plot_strategy",
         "policy", "evaluation", "decision",
     },
@@ -155,7 +155,7 @@ def load_calibration_config(path: str | Path = DEFAULT_CALIBRATION_CONFIG) -> di
         config = tomllib.load(stream)
     _require_keys(config)
 
-    for key in ("calibration_version", "status", "development_version", "prediction_dir"):
+    for key in ("calibration_version", "development_version", "prediction_dir"):
         _require(isinstance(config[key], str) and config[key] != "", key, "a non-empty string",
                  config[key])
     methods = config["methods"]
@@ -688,7 +688,6 @@ def provenance(
     _, stats = evaluate.load_manifest(data_dir)
     return {
         "calibration_version": config["calibration_version"],
-        "status": config["status"],
         "development_version": config["development_version"],
         "feature_set_version": load_feature_config()["feature_set_version"],
         "dataset_version": stats["dataset_version"],

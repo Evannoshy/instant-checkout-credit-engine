@@ -1,5 +1,4 @@
 calibration_version = "tabular_calibration_v1"
-status = "proposed"
 development_version = "tabular_development_v1"   # calibration rows come from this config's calibration role
 prediction_dir = "reports/tabular/raw_predictions"
 
@@ -9,8 +8,7 @@ methods = ["raw", "platt", "isotonic"]
 # logit(0) and log loss on an exact 0 or 1 stay finite.
 probability_clip = 1e-6
 calibration_plot_bins = 10
-# Most calibrated predictions sit between 0.03 and 0.35; uniform bins would put
-# nearly all loans in a few bins and leave the rest almost empty.
+
 calibration_plot_strategy = "quantile"
 
 [policy]
