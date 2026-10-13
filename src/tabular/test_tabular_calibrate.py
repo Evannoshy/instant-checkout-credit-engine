@@ -3,7 +3,7 @@
 Most tests use made-up data: loading tests write a manifest and prediction files to
 tmp_path, and calibrator tests use synthetic arrays. The last section checks the
 committed evidence: the real prediction files load with the expected counts, and the
-committed results match a recomputation. The full recomputation (bootstrap included,
+committed results match a recomputation within tight numerical tolerances. The full recomputation (bootstrap included,
 about 90 seconds) runs only when CALIBRATION_RECOMPUTE is set. No test reads the raw CSV.
 
 From the repository root, show each check and its actual pytest result with:
@@ -32,6 +32,7 @@ from scipy.special import expit, logit
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
 
 from src.tabular import calibrate, evaluate
+from src.tabular.xgboost_baseline import validate_environment
 from src.tabular.calibrate import (
     CANDIDATES,
     ERROR_MESSAGES,
@@ -647,6 +648,66 @@ def test_missing_extra_or_duplicate_ids_are_rejected(
         _load(fixture_data)
 
 
+@pytest.mark.parametrize("set_name", SETS)
+@pytest.mark.parametrize("column", ("model_name", "model_version"))
+def test_prediction_metadata_must_match_between_sets(
+    fixture_data: FixtureData, set_name: str, column: str,
+) -> None:
+    """Calibration and validation files must belong to the same model and version."""
+    path = fixture_data.prediction_dir / f"logistic_regression_{set_name}.csv"
+    frame = pd.read_csv(path, dtype={"loan_id": str})
+    frame[column] = "different-model-or-version"
+    frame.to_csv(path, index=False)
+    with pytest.raises(ValueError, match=f"different {column}"):
+        _load(fixture_data)
+
+
+@pytest.mark.parametrize("set_name", SETS)
+@pytest.mark.parametrize("column", ("model_name", "model_version"))
+def test_prediction_metadata_cannot_mix_values_within_a_file(
+    fixture_data: FixtureData, set_name: str, column: str,
+) -> None:
+    """One file cannot mix predictions labelled as different models or versions."""
+    path = fixture_data.prediction_dir / f"logistic_regression_{set_name}.csv"
+    frame = pd.read_csv(path, dtype={"loan_id": str})
+    frame.loc[0, column] = "different-model-or-version"
+    frame.to_csv(path, index=False)
+    with pytest.raises(ValueError, match=f"one non-empty {column}"):
+        _load(fixture_data)
+
+
+@pytest.mark.parametrize("set_name", SETS)
+@pytest.mark.parametrize("column", ("model_name", "model_version"))
+@pytest.mark.parametrize("value", (None, "", "   "))
+def test_prediction_metadata_cannot_be_missing_or_blank(
+    fixture_data: FixtureData, set_name: str, column: str, value: str | None,
+) -> None:
+    """Every prediction row needs a non-empty model name and version."""
+    path = fixture_data.prediction_dir / f"logistic_regression_{set_name}.csv"
+    frame = pd.read_csv(path, dtype={"loan_id": str})
+    frame.loc[0, column] = value
+    frame.to_csv(path, index=False)
+    with pytest.raises(ValueError, match=f"one non-empty {column}"):
+        _load(fixture_data)
+
+
+@pytest.mark.parametrize("set_name", SETS)
+@pytest.mark.parametrize("mixed", (False, True))
+def test_prediction_split_must_match_the_requested_set(
+    fixture_data: FixtureData, set_name: str, mixed: bool,
+) -> None:
+    """Correct IDs do not excuse a wrong or mixed split label in a prediction file."""
+    path = fixture_data.prediction_dir / f"logistic_regression_{set_name}.csv"
+    frame = pd.read_csv(path, dtype={"loan_id": str})
+    if mixed:
+        frame.loc[0, "split"] = "train"
+    else:
+        frame["split"] = "train"
+    frame.to_csv(path, index=False)
+    with pytest.raises(ValueError, match="must contain only split"):
+        _load(fixture_data)
+
+
 def _forbid_raw_csv(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make every path to the raw CSV raise, so a test fails if anything tries it."""
     def refuse(*args, **kwargs):
@@ -801,28 +862,69 @@ def test_committed_results_match_recomputed_metrics(
                     )
 
 
+def _assert_evidence_matches(expected, actual, path: str = "evidence") -> None:
+    """Compare floats within tolerance, but keep counts, types and decisions exact."""
+    assert type(actual) is type(expected), path
+    if isinstance(expected, dict):
+        assert set(actual) == set(expected), path
+        for key in expected:
+            _assert_evidence_matches(expected[key], actual[key], f"{path}.{key}")
+    elif isinstance(expected, list):
+        assert len(actual) == len(expected), path
+        for index, (first, second) in enumerate(zip(expected, actual)):
+            _assert_evidence_matches(first, second, f"{path}[{index}]")
+    elif isinstance(expected, float):
+        assert actual == pytest.approx(expected, rel=1e-12, abs=1e-14), path
+    else:
+        assert actual == expected, path
+
+
+def test_evidence_comparison_accepts_floating_point_roundoff() -> None:
+    """A one-bit floating-point difference does not invalidate otherwise identical evidence."""
+    expected = {"rows": 12, "chosen_method": "platt", "metrics": [0.65], "chosen": True}
+    actual = copy.deepcopy(expected)
+    actual["metrics"][0] = float(np.nextafter(0.65, np.inf))
+    _assert_evidence_matches(expected, actual)
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("rows", 13), ("rows", 12.0), ("chosen_method", "isotonic"),
+    ("metrics", [0.650001]), ("metrics", [0.65, 0.66]), ("chosen", False),
+])
+def test_evidence_comparison_rejects_changed_results(field: str, value) -> None:
+    """Numerical tolerance cannot hide changed counts, methods, decisions or meaningful scores."""
+    expected = {"rows": 12, "chosen_method": "platt", "metrics": [0.65], "chosen": True}
+    actual = {**expected, field: value}
+    with pytest.raises(AssertionError):
+        _assert_evidence_matches(expected, actual)
+
+
 @pytest.mark.skipif(
     not os.environ.get("CALIBRATION_RECOMPUTE"),
     reason="CALIBRATION_RECOMPUTE is not set (full rerun takes about 90 seconds)",
 )
 def test_committed_evidence_equals_a_fresh_recomputation(tmp_path: Path) -> None:
-    """A full rerun in the recorded environment reproduces the committed JSON and CSVs exactly."""
+    """A pinned-runtime rerun matches numerical evidence without changing any recorded provenance."""
     run_calibration(REAL_DATA_DIR, REAL_PREDICTION_DIR, tmp_path)
     saved, fresh = (
         json.loads((directory / EVIDENCE_FILES[0]).read_text(encoding="utf-8"))
         for directory in (REAL_OUTPUT_DIR, tmp_path)
     )
-    assert fresh["environment"] == saved["environment"], (
-        "Regenerate the committed evidence in the recorded environment before comparing"
-    )
+    validate_environment(saved["environment"])
+    validate_environment(fresh["environment"])
     assert set(fresh) == set(saved), (
         f"Keys differ: only committed {sorted(set(saved) - set(fresh))}, "
         f"only fresh {sorted(set(fresh) - set(saved))}; rerun python -m src.tabular.calibrate"
     )
     for key in saved:
-        assert fresh[key] == saved[key], key
+        if key == "environment":
+            continue
+        if key in ("candidates", "champion", "results"):
+            _assert_evidence_matches(saved[key], fresh[key], key)
+        else:
+            assert fresh[key] == saved[key], key
     for filename in EVIDENCE_FILES[1:]:
         assert_frame_equal(
             pd.read_csv(tmp_path / filename), pd.read_csv(REAL_OUTPUT_DIR / filename),
-            check_exact=True, obj=filename,
+            check_exact=False, rtol=1e-12, atol=1e-14, obj=filename,
         )

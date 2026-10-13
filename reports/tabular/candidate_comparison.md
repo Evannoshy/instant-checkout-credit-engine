@@ -34,8 +34,10 @@ The findings are summarised in section 7.
 
 Inputs are Allan's raw predictions in `reports/tabular/raw_predictions/` (commit `b6bd0f6`).
 They pass his `test_raw_predictions.py` checks: coverage, split, model version, and raw
-metrics against his manifest. Outcomes were joined from the split manifest by `loan_id`; the
-raw CSV was not read. 4,090 calibration defaults is an adequate sample for isotonic regression.
+metrics against his manifest. The calibration loader also rejects wrong split labels, missing
+or mixed model metadata, and calibration/validation pairs from different models or versions.
+Outcomes were joined from the split manifest by `loan_id`; the raw CSV was not read.
+4,090 calibration defaults is an adequate sample for isotonic regression.
 
 - **Platt:** `sigmoid(a · logit(p) + b)`, unpenalised (`C=np.inf`); the input is clipped to [1e-6, 1 − 1e-6].
 - **Isotonic:** a non-decreasing step function, with its output clipped to [1e-6, 1 − 1e-6].
@@ -248,8 +250,10 @@ the validation labels.
 - **Calibration-shift sensitivity was not studied** beyond the gap between the calibration
   period (Jan–Jul 2013) and validation (Aug–Dec 2013).
 - **The environment differs slightly from Allan's.** This run used Python 3.13.9 against his
-  3.13.15, with identical package pins. Nothing was refit, and a full rerun reproduces the
-  committed outputs exactly.
+  3.13.15, with identical package pins. The base-model prediction files were reused unchanged.
+  The full rerun checks both recorded environments against the repository pins and compares
+  floats with relative tolerance 1e-12 and absolute tolerance 1e-14. Counts, versions, settings
+  and selection decisions must still match exactly. Each run keeps its own environment record.
 - **Not covered here:**
   - expected-loss scenarios and a refer band;
   - subgroup and fairness checks (G4);

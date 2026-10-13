@@ -22,11 +22,10 @@ takes no validation data); validation grades and never fits; the locked test
 split is never read. The raw CSV is never opened: outcomes come from the
 manifest and are joined to predictions by ``loan_id``.
 
-Inputs are checked by Allan's committed test
+The loader checks coverage, split labels and model metadata. Each calibration
+and validation pair must belong to the same model and version. Allan's
 ``test_raw_predictions.py::test_real_prediction_files_cover_every_calibration_and_validation_loan``
-(coverage, split, model version, raw metrics against his manifest). This module
-only re-runs ``evaluate.validate_prediction_frame`` on what it loads, so run
-that test first.
+also checks the raw metrics against his manifest; run that test first.
 
 Run from the repository root:
     python -m src.tabular.calibrate
@@ -108,6 +107,16 @@ ERROR_MESSAGES: dict[str, str] = {
     "bad_value": "Calibration config {key} must be {requirement}; got {value!r}",
     "unknown_methods": "Unknown calibration methods {unknown}; known methods are {known}",
     "rows_not_aligned": "{first} and {second} validation rows are not the same loans in the same order",
+    "wrong_prediction_split": (
+        "Prediction file for {candidate} {set_name} must contain only split {set_name!r}"
+    ),
+    "bad_prediction_metadata": (
+        "Prediction file for {candidate} {set_name} must contain one non-empty {column}"
+    ),
+    "prediction_metadata_mismatch": (
+        "{candidate} calibration and validation predictions have different {column}: "
+        "{calibration!r} vs {validation!r}"
+    ),
 }
 
 
@@ -260,6 +269,24 @@ class CalibrationRun:
     validation_y: np.ndarray
 
 
+def _prediction_metadata(frame: pd.DataFrame, candidate: str, set_name: str) -> dict[str, str]:
+    """Require the requested split and one non-empty model name and version per file."""
+    if not frame["split"].eq(set_name).all():
+        raise ValueError(ERROR_MESSAGES["wrong_prediction_split"].format(
+            candidate=candidate, set_name=set_name,
+        ))
+    metadata = {}
+    for column in ("model_name", "model_version"):
+        values = frame[column]
+        valid_strings = values.map(lambda value: isinstance(value, str) and bool(value.strip()))
+        if not valid_strings.all() or values.nunique() != 1:
+            raise ValueError(ERROR_MESSAGES["bad_prediction_metadata"].format(
+                candidate=candidate, set_name=set_name, column=column,
+            ))
+        metadata[column] = str(values.iloc[0])
+    return metadata
+
+
 def load_candidates(
     prediction_dir: str | Path,
     data_dir: str | Path = DEFAULT_DATA_DIR,
@@ -269,9 +296,10 @@ def load_candidates(
 
     Expected IDs come from the development roles (calibration) and the manifest
     (validation), never from the files themselves. Each file is checked with
-    ``evaluate.validate_prediction_frame``; the other input checks are in
-    Allan's committed test. Rows are sorted by loan_id, so every candidate's
-    arrays line up loan for loan.
+    ``evaluate.validate_prediction_frame`` and must have the requested split
+    label and uniform, non-empty model metadata. Both files must name the same
+    model and version. Rows are sorted by loan_id, so every candidate's arrays
+    line up loan for loan.
     """
     manifest, _ = evaluate.load_manifest(data_dir)
     target = manifest.astype({"loan_id": str}).set_index("loan_id")["target"]
@@ -284,19 +312,28 @@ def load_candidates(
     candidates = {}
     for name in CANDIDATES:
         sets = {}
+        metadata = {}
         for set_name in SETS:
             frame = pd.read_csv(
                 Path(prediction_dir) / f"{name}_{set_name}.csv", dtype={"loan_id": str}
             )
             evaluate.validate_prediction_frame(frame, expected_ids[set_name])
+            metadata[set_name] = _prediction_metadata(frame, name, set_name)
             frame = frame.sort_values("loan_id", ignore_index=True)
             sets[set_name] = Scores(
                 loan_ids=frame["loan_id"].to_numpy(dtype=str),
                 p=frame["p_default_tabular"].to_numpy(dtype=np.float64),
                 y=target.loc[frame["loan_id"]].to_numpy(dtype=np.int64),
             )
+        for column in ("model_name", "model_version"):
+            if metadata["calibration"][column] != metadata["validation"][column]:
+                raise ValueError(ERROR_MESSAGES["prediction_metadata_mismatch"].format(
+                    candidate=name, column=column,
+                    calibration=metadata["calibration"][column],
+                    validation=metadata["validation"][column],
+                ))
         candidates[name] = Candidate(
-            name, str(frame["model_name"].iloc[0]), str(frame["model_version"].iloc[0]), sets
+            name, metadata["calibration"]["model_name"], metadata["calibration"]["model_version"], sets
         )
     return candidates
 
@@ -783,4 +820,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
