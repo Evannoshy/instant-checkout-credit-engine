@@ -1,0 +1,48 @@
+calibration_version = "tabular_calibration_v1"
+development_version = "tabular_development_v1"   # calibration rows come from this config's calibration role
+prediction_dir = "reports/tabular/raw_predictions"
+
+# Methods in order of complexity; the decision rule prefers the earlier one.
+methods = ["raw", "platt", "isotonic"]
+# The Platt logit input and the isotonic output are clipped to [eps, 1 - eps], so that
+# logit(0) and log loss on an exact 0 or 1 stay finite.
+probability_clip = 1e-6
+calibration_plot_bins = 10
+
+calibration_plot_strategy = "quantile"
+
+[policy]
+approve_rule = "p < threshold"
+# Curve grid on calibrated probability of default, 101 points. At 0.00 nothing is approved,
+# so the default rate among approved is undefined there; at 1.00 everything is approved.
+thresholds = { start = 0.00, stop = 1.00, step = 0.01 }
+# Rows of the report table. Illustrative only: NOT a threshold proposal (handbook section 14).
+illustrative_thresholds = [0.10, 0.15, 0.20, 0.25]
+# Threshold-free comparison: default rate among approved at these approval rates.
+approval_rates = [0.50, 0.70, 0.80, 0.90]
+
+# Paired bootstrap for differences between two probability versions on the same validation rows.
+[evaluation]
+bootstrap_resamples = 1000
+seed = 42
+
+# Decision rule, written before any calibrated validation result was seen. Applied to validation.
+# 1. Per candidate, the calibration method is the earliest in `methods` unless a later one beats
+#    it on `method_metric` by more than its margin AND the paired 95% CI of the difference
+#    excludes zero.
+# 2. Champion: the challenger becomes champion only if, each with its rule-1 method, it beats
+#    the incumbent on log loss or Brier score (beyond the margin, CI excludes zero) and is not
+#    worse on ROC-AUC by more than the margin. Otherwise the incumbent remains the
+#    recommendation: it is simpler, explainable and already approved.
+# 3. Any other candidate (xgboost_default) is reported for completeness only. Allan's search
+#    selected trial 1, so it is not a champion candidate.
+[decision]
+method_metric = "log_loss"
+incumbent = "logistic_regression"
+challenger = "xgboost_trial1"
+
+[decision.margins]
+roc_auc = 0.002       # same tolerance as Allan's XGBoost search
+pr_auc = 0.002        # same as ROC-AUC
+brier_score = 0.0005  # about 8% of the gap between the constant baseline (~0.1285) and the models (~0.122)
+log_loss = 0.002      # about 9% of the same gap in log loss (~0.425 vs ~0.403)
