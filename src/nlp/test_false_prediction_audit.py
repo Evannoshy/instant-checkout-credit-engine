@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
+from src.nlp.baseline_tfidf import strip_field_labels
+from src.nlp.evaluate_baseline import load_tuning_config, pipeline_from_params
 from src.nlp.false_prediction_audit import select_review_cases
+from src.nlp.preprocess import build_text_payload
 
 
 def test_selection_is_reproducible_and_contains_both_error_types() -> None:
@@ -38,3 +44,20 @@ def test_selection_rejects_insufficient_errors() -> None:
     )
     with pytest.raises(ValueError, match="Only 1 false_positive"):
         select_review_cases(rows, n_per_error=2, n_extreme=1)
+
+
+def test_published_tokenizer_can_form_bigrams_across_payload_fields() -> None:
+    """Keep the documented boundary artifact tied to the actual tuned settings."""
+    root = Path(__file__).resolve().parents[2]
+    metrics = json.loads((root / "reports/nlp/tfidf_tuning_metrics.json").read_text())
+    config = load_tuning_config()
+    model = pipeline_from_params(metrics["selection"]["best_params"], config["model"])
+    analyze = model.named_steps["vectorize"].build_analyzer()
+    payload = build_text_payload({
+        "title": "Refinance", "purpose": "debt_consolidation", "desc": "Pay bills",
+    })
+    stripped = strip_field_labels(payload)
+    assert "\n" in stripped
+    assert "debt_consolidation" not in stripped
+    assert "consolidation pay" in analyze(stripped)
+    assert "consolidation pay" not in analyze("Pay bills")

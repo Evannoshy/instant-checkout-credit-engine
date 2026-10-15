@@ -36,6 +36,7 @@ This log records decisions that affect the tabular track or its contracts with t
 | D-014 | Exchange out-of-fold default probabilities between tracks | Accepted | Tabular + NLP + fusion leads | 10 Sep 2026 | Fusion evaluation justifies a versioned replacement |
 | D-015 | Freeze an executable, exact-match definition of the v1 LendingClub cohort | Accepted | Tabular + NLP leads | 19 Sep 2026 | Material cohort defect or source change is demonstrated |
 | D-016 | Approve the nine-feature `tabular_features_v1` baseline contract | Accepted | Tabular lead | 23 Sep 2026 | A documented defect or approved v2 proposal is demonstrated |
+| D-017 | Use a separate description-only distress-density export for the NLP handoff | Proposed | NLP + tabular leads | Week 9 export review | Token rules, source fields or downstream feature adoption change |
 
 ## 4. Detailed decision records
 
@@ -352,6 +353,48 @@ real-data check returns 86,293 training rows and 21,784 validation rows.
 
 A documented preprocessing defect, new data source or approved
 `tabular_features_v2` proposal is demonstrated.
+
+## D-017 - Description-only distress-density handoff
+
+**Status:** Proposed
+**Owner:** NLP + tabular leads
+**Review gate:** Week 9 export review
+
+### Context and proposed contract
+
+Ari's review of [PR #18](https://github.com/Evannoshy/instant-checkout-credit-engine/pull/18)
+recommends isolating borrower descriptions after the EDA found purpose-label hits
+in the composite keyword feature. Evan's Week 9 request, relayed by Zheng Wei,
+asks for a Parquet containing `loan_id`, `split`, and
+`desc_distress_keyword_density`.
+
+The implementation provides `nlp-desc-distress-v1` as a separate, deterministic
+train/validation export. It keeps the existing cleaning and keyword rules and
+removes title and purpose from both the keyword count and word-count denominator.
+Missing or zero-word descriptions receive zero. The source checksum and frozen
+IDs are verified; no outcome columns are read. The contract and reproduction
+command are in [the export handoff](../nlp-desc-distress-export.md).
+
+### Evidence and limits
+
+The training evidence distinguishes the purpose share of hits across all loans
+(11.6%) from the share within medical loans (43.1%). The export preserves 86,293
+train and 21,784 validation IDs and matches the existing description-only training
+aggregates. The [limitations log](../nlp-pipeline-limitations.md) records residual
+correlation with purpose and the limits of the error-review sample.
+
+### What this does not decide
+
+This proposal adds a handoff artifact. It does not revise the frozen six-column
+lexical feature set or `tabular_features_v1`, select a model, or claim a predictive
+gain. Downstream adoption needs the leads' contract review and a versioned model
+comparison. Existing hash-pinned tabular experiments continue using their
+original inputs.
+
+### Revisit trigger
+
+Changes to cleaning, tokenization, keywords, source fields or split scope require
+a new export version. Model inclusion requires a separate feature-contract decision.
 
 ## 5. Adding a decision
 

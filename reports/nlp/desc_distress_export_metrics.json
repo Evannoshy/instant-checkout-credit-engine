@@ -1,0 +1,48 @@
+{
+  "columns": [
+    "loan_id",
+    "split",
+    "desc_distress_keyword_density"
+  ],
+  "density_definition": "exact distress-keyword tokens / all cleaned description word tokens",
+  "feature_version": "nlp-desc-distress-v1",
+  "keywords": [
+    "arrears",
+    "bankruptcy",
+    "behind",
+    "delinquent",
+    "emergency",
+    "eviction",
+    "foreclosure",
+    "medical",
+    "overdue",
+    "payday",
+    "unemployed"
+  ],
+  "outcome_columns_read": [],
+  "parquet_sha256": "2ae52d86b1b59bed5c6d62ea85fd0525e5facd5b90d33970d337d68ae676b3e5",
+  "positive_density_rows_by_split": {
+    "train": 4661,
+    "validation": 814
+  },
+  "provenance": {
+    "cohort": "real_text_matured_v1",
+    "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+    "manifest_sha256": "41686f71f2534616e565b5ea7b78873cd2222f5079b235c179942192ac898e48",
+    "preprocess_version": "nlp-preprocess-v1",
+    "raw_csv_sha256": "23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c",
+    "split_version": "split-v1",
+    "train_ids_sha256": "829c0bb874ad8dbf75a2ab53d0f7d3d11622bd6d70776b2ace9bffcdb4d73feb",
+    "val_ids_sha256": "6bb5bec374d7a89a4938155733ce61a01b8883901e561ca8804aae5b2c7f8a20"
+  },
+  "rows": 108077,
+  "rows_by_split": {
+    "train": 86293,
+    "validation": 21784
+  },
+  "source_fields": [
+    "desc"
+  ],
+  "test_rows_exported": 0,
+  "zero_word_density": 0.0
+}

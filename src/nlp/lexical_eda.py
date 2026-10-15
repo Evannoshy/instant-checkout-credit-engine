@@ -528,10 +528,16 @@ def build_markdown_report(
         medical_sentence = "No `medical` purpose row was present."
     else:
         medical_sentence = (
-            "For `medical`, {label_only:.1%} of rows have a purpose-label hit with no "
-            "distress keyword in `desc`; only {desc_rate:.1%} of descriptions contain a "
-            "distress keyword."
+            "Within `medical`, the purpose label contributes {purpose_hits:,} of "
+            "{payload_hits:,} keyword hits ({purpose_share:.1%}). That percentage "
+            "uses medical loans as its denominator, not the entire training set. "
+            "For {label_only:.1%} of medical rows, the purpose label supplies a hit "
+            "while `desc` contains none; {desc_rate:.1%} of descriptions contain a "
+            "distress keyword. The title may also contain a hit in either group."
         ).format(
+            purpose_hits=int(medical["purpose_label_distress_hits"]),
+            payload_hits=int(medical["payload_distress_hits"]),
+            purpose_share=float(medical["purpose_label_share_of_payload_hits"]),
             label_only=float(medical["purpose_label_only_hit_rate"]),
             desc_rate=float(medical["desc_distress_mention_rate"]),
         )
@@ -596,10 +602,19 @@ full payload come directly from the `purpose` field. The only purpose label that
 the configured distress words is {', '.join(f'`{x}`' for x in artifact['purpose_categories_with_distress_label_hits'])}.
 {medical_sentence}
 
-The full-payload density therefore mixes two ideas: what the borrower wrote and which category
-the loan belongs to. For questions about borrower prose, use the description-only density and
-mention-rate columns in `reports/nlp/lexical_purpose_summary.csv`. Title hits remain part of the
-full payload, but the source chart keeps them separate from both purpose and description.
+The full-payload density mixes borrower prose with title and category metadata. The grouped
+`mean_desc_distress_keyword_density` and `desc_distress_mention_rate` columns in
+`reports/nlp/lexical_purpose_summary.csv` isolate descriptions. They are purpose-level
+aggregates, so they must not be joined back as if they were individual borrower features.
+
+For the tabular handoff, use the row-level `desc_distress_keyword_density` in
+`data/nlp/desc_distress_keyword_density.parquet`; see [the export contract](nlp-desc-distress-export.md).
+When `purpose` is also a model input, the composite density can encode part of the same
+category information again and complicate feature-importance interpretation. The current
+`tabular_features_v1` contract does not include `purpose`, so this EDA does not establish
+double counting in that baseline. Description-only density removes the direct metadata
+contribution, but borrower prose can still correlate with purpose. Any improvement in
+prediction or calibration needs a separate model comparison.
 
 ![Sources of distress-keyword hits](../reports/nlp/figures/lexical_keyword_sources.png)
 

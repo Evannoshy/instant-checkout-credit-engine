@@ -74,12 +74,21 @@ Yes, in one important case. Across training rows,
 11.6% of all distress-keyword hits in the
 full payload come directly from the `purpose` field. The only purpose label that contains one of
 the configured distress words is `medical`.
-For `medical`, 43.8% of rows have a purpose-label hit with no distress keyword in `desc`; only 56.2% of descriptions contain a distress keyword.
+Within `medical`, the purpose label contributes 849 of 1,970 keyword hits (43.1%). That percentage uses medical loans as its denominator, not the entire training set. For 43.8% of medical rows, the purpose label supplies a hit while `desc` contains none; 56.2% of descriptions contain a distress keyword. The title may also contain a hit in either group.
 
-The full-payload density therefore mixes two ideas: what the borrower wrote and which category
-the loan belongs to. For questions about borrower prose, use the description-only density and
-mention-rate columns in `reports/nlp/lexical_purpose_summary.csv`. Title hits remain part of the
-full payload, but the source chart keeps them separate from both purpose and description.
+The full-payload density mixes borrower prose with title and category metadata. The grouped
+`mean_desc_distress_keyword_density` and `desc_distress_mention_rate` columns in
+`reports/nlp/lexical_purpose_summary.csv` isolate descriptions. They are purpose-level
+aggregates, so they must not be joined back as if they were individual borrower features.
+
+For the tabular handoff, use the row-level `desc_distress_keyword_density` in
+`data/nlp/desc_distress_keyword_density.parquet`; see [the export contract](nlp-desc-distress-export.md).
+When `purpose` is also a model input, the composite density can encode part of the same
+category information again and complicate feature-importance interpretation. The current
+`tabular_features_v1` contract does not include `purpose`, so this EDA does not establish
+double counting in that baseline. Description-only density removes the direct metadata
+contribution, but borrower prose can still correlate with purpose. Any improvement in
+prediction or calibration needs a separate model comparison.
 
 ![Sources of distress-keyword hits](../reports/nlp/figures/lexical_keyword_sources.png)
 
