@@ -60,7 +60,8 @@ def fit_spy(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
         real_fit = pipeline.fit
 
         def fit(features, target):
-            fits.append({"ids": set(features.index), "class_weight": config["model"]["class_weight"]})
+            classifier = pipeline.named_steps["classify"]
+            fits.append({"ids": set(features.index), "class_weight": classifier.get_params()["class_weight"]})
             return real_fit(features, target)
 
         pipeline.fit = fit
@@ -150,8 +151,11 @@ def test_unexpected_row_counts_are_refused() -> None:
         return {"calibration": (None, range(calibration)), "validation": (None, range(validation))}
 
     logistic_unweighted.require_expected_rows(59_353, scoring(26_940, 21_784))
-    with pytest.raises(ValueError, match="Expected rows"):
-        logistic_unweighted.require_expected_rows(86_293, scoring(26_940, 21_784))
+    for fit_rows, calibration, validation in (
+        (86_293, 26_940, 21_784), (59_353, 26_939, 21_784), (59_353, 26_940, 21_785)
+    ):
+        with pytest.raises(ValueError, match="Expected rows"):
+            logistic_unweighted.require_expected_rows(fit_rows, scoring(calibration, validation))
 
 
 def test_runner_requests_only_model_fit_calibration_and_validation(

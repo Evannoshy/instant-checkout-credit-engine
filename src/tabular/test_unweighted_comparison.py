@@ -258,6 +258,12 @@ def test_committed_comparison_and_report_are_reproduced_from_committed_files(tmp
                 assert actual[key] == pytest.approx(value, rel=1e-9, abs=1e-12)
             else:
                 assert actual[key] == value
+    for reference, metrics in saved["unweighted_minus_reference"].items():
+        for metric, expected in metrics.items():
+            actual = rebuilt["unweighted_minus_reference"][reference][metric]
+            assert actual["verdict"] == expected["verdict"]
+            for bound in ("delta", "ci_low", "ci_high"):
+                assert actual[bound] == pytest.approx(expected[bound], rel=1e-9, abs=1e-12)
     assert (tmp_path / "report.md").read_text(encoding="utf-8") == (
         unweighted_comparison.REPORT_PATH.read_text(encoding="utf-8")
     )
