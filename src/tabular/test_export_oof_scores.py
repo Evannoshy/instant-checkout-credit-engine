@@ -220,6 +220,23 @@ def test_committed_oof_file_covers_35234_model_fit_loans_and_no_other_split() ->
     )
 
 
+def test_every_committed_oof_row_was_held_out_and_fit_only_on_earlier_months() -> None:
+    """On the real folds, each of the 35,234 committed rows is absent from its fold's fitting IDs,
+    and every fitting month is earlier than that row's month (manifest only, no raw CSV)."""
+    frame, _ = committed_oof()
+    roles = development.assign_development_roles(REAL_DATA_DIR)
+    issue_month = roles.loc[roles["role"].eq("model_fit"), "issue_month"]
+    folds = xgboost_baseline.build_folds(issue_month, xgboost_baseline.load_xgboost_config())
+    assert len(folds) == N_FOLDS
+
+    for fold_id, fold in enumerate(folds):
+        rows = frame.loc[frame["fold_id"].eq(fold_id), "loan_id"]
+        assert set(rows) == set(fold.holdout_ids)
+        assert not rows.isin(fold.train_ids).any()
+        latest_fit_month = issue_month.loc[fold.train_ids].max()
+        assert (issue_month.loc[rows] > latest_fit_month).all()
+
+
 def test_committed_oof_manifest_checksum_matches_the_file() -> None:
     """The manifest's recorded SHA-256 is the committed parquet's actual SHA-256."""
     _, manifest = committed_oof()
