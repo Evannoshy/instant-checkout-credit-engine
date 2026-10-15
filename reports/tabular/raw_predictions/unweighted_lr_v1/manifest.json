@@ -1,0 +1,124 @@
+{
+  "experiment": "unweighted_lr_v1",
+  "model_name": "logistic_regression",
+  "model_version": "tabular-logistic-unweighted-v1-model-fit",
+  "base_config": {
+    "path": "configs/tabular_logistic_v1.toml",
+    "frozen_version": "tabular-logistic-v1",
+    "settings": {
+      "C": 1.0,
+      "class_weight": "balanced",
+      "max_iter": 1000,
+      "random_state": 42
+    }
+  },
+  "changed_setting": {
+    "class_weight": {
+      "from": "balanced",
+      "to": null
+    }
+  },
+  "params": {
+    "C": 1.0,
+    "class_weight": null,
+    "max_iter": 1000,
+    "random_state": 42
+  },
+  "fit_rows": {
+    "role": "model_fit",
+    "rows": 59353
+  },
+  "scoring_rows": {
+    "calibration": 26940,
+    "validation": 21784
+  },
+  "test_rows_available_to_model": 0,
+  "note": "Raw, uncalibrated probabilities. Do not apply the balanced v1 Platt mapping: it was fitted to a different model's scores.",
+  "files": {
+    "calibration.csv": {
+      "model_name": "logistic_regression",
+      "model_version": "tabular-logistic-unweighted-v1-model-fit",
+      "params": {
+        "C": 1.0,
+        "class_weight": null,
+        "max_iter": 1000,
+        "random_state": 42
+      },
+      "rows": 26940,
+      "expected_rows": 26940,
+      "missing_ids": 0,
+      "min_probability": 0.012345681134632854,
+      "max_probability": 0.6031295032074702,
+      "raw_metrics": {
+        "rows": 26940,
+        "positives": 4090,
+        "prevalence": 0.151818856718634,
+        "roc_auc": 0.6614117049108408,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2540642386982448,
+        "pr_auc_baseline": 0.151818856718634,
+        "brier_score": 0.12311009357784533,
+        "log_loss": 0.40466000289677595,
+        "f1_at_0.5": 0.003889158969372873,
+        "f1_best": 0.3330229893289408,
+        "f1_best_threshold": 0.1644117457615507
+      },
+      "sha256": "1a35d98cd6cc2509e47daaa236f628f22295cd23d9deb05c0666335a54574367"
+    },
+    "validation.csv": {
+      "model_name": "logistic_regression",
+      "model_version": "tabular-logistic-unweighted-v1-model-fit",
+      "params": {
+        "C": 1.0,
+        "class_weight": null,
+        "max_iter": 1000,
+        "random_state": 42
+      },
+      "rows": 21784,
+      "expected_rows": 21784,
+      "missing_ids": 0,
+      "min_probability": 0.017105127819070278,
+      "max_probability": 0.5649956283700758,
+      "raw_metrics": {
+        "rows": 21784,
+        "positives": 3298,
+        "prevalence": 0.15139551964744766,
+        "roc_auc": 0.6662396639693966,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.2582265365530164,
+        "pr_auc_baseline": 0.15139551964744766,
+        "brier_score": 0.12251689729854244,
+        "log_loss": 0.40319933311648026,
+        "f1_at_0.5": 0.007836045810729355,
+        "f1_best": 0.3419905213270142,
+        "f1_best_threshold": 0.17260933089199704
+      },
+      "sha256": "b6a2dbb5caf78193d9436fd7b8a99b2d8ea3144d44a0f07cf88e68665b389ba7"
+    }
+  },
+  "inputs_sha256": {
+    "data/raw/loan.csv": "23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c",
+    "data/split_manifest.csv": "41686f71f2534616e565b5ea7b78873cd2222f5079b235c179942192ac898e48",
+    "data/split_statistics.json": "97d56468e6d27e61dd8ccea79e2690a3fd8a9ca830a372dd563c218ee9579281",
+    "configs/tabular_features_v1.toml": "51562d369009488a93d461a20fdb09e6de78c47dab8f2a421103f8cc753e0540",
+    "configs/tabular_logistic_v1.toml": "ab52ccc5e44d5985036630190d6d209d6fc58cd0d33aef57e3ec9c5c63f25649",
+    "configs/tabular_development_v1.toml": "d4bf4b225adfa7f5e2ad835ab8efd4195c505c3005f1999011221fc8c2c68bf2"
+  },
+  "environment": {
+    "python": "3.13.9",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "pyarrow": "23.0.1",
+    "platform": "Darwin",
+    "machine": "arm64"
+  },
+  "reproduce": [
+    "python -m pip install -r src/tabular/requirements.txt",
+    "python -m src.tabular.logistic_unweighted --raw-csv data/raw/loan.csv",
+    "LENDINGCLUB_RAW_CSV=data/raw/loan.csv python -m pytest src/tabular/test_logistic_unweighted.py -v"
+  ]
+}
