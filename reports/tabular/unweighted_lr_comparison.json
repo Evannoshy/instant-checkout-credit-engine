@@ -1,0 +1,185 @@
+{
+  "candidates": [
+    {
+      "key": "balanced_lr_raw",
+      "label": "Balanced LR, raw",
+      "model_version": "tabular-logistic-v1-model-fit",
+      "method": "raw",
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.48287847669864037,
+      "mean_p_minus_prevalence": 0.3314829570511927,
+      "roc_auc": 0.6659989100958312,
+      "pr_auc": 0.2575375225373021,
+      "brier_score": 0.2363088756916214,
+      "log_loss": 0.6665737985243545
+    },
+    {
+      "key": "balanced_lr_platt",
+      "label": "Balanced LR + existing Platt",
+      "model_version": "tabular-logistic-v1-model-fit",
+      "method": "platt",
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.15103600381317703,
+      "mean_p_minus_prevalence": -0.0003595158342706295,
+      "roc_auc": 0.6659989100958312,
+      "pr_auc": 0.2575375225373021,
+      "brier_score": 0.12250249503423159,
+      "log_loss": 0.4030505745338462
+    },
+    {
+      "key": "unweighted_lr_raw",
+      "label": "Unweighted LR, raw",
+      "model_version": "tabular-logistic-unweighted-v1-model-fit",
+      "method": "raw",
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.1593462033135063,
+      "mean_p_minus_prevalence": 0.007950683666058639,
+      "roc_auc": 0.6662396639693966,
+      "pr_auc": 0.2582265365530164,
+      "brier_score": 0.12251689729854247,
+      "log_loss": 0.40319933311648026
+    },
+    {
+      "key": "xgboost_selected_raw",
+      "label": "Selected XGBoost (xgboost_trial1), raw",
+      "model_version": "tabular-xgboost-v1-trial1",
+      "method": "raw",
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.15945713532940808,
+      "mean_p_minus_prevalence": 0.008061615681960427,
+      "roc_auc": 0.66608740904152,
+      "pr_auc": 0.2583793795388654,
+      "brier_score": 0.1224166998613578,
+      "log_loss": 0.4030212075657436
+    }
+  ],
+  "platt_mapping": {
+    "fit_on": "calibration role, balanced LR raw scores",
+    "slope": 0.9912598551922506,
+    "intercept": -1.7735760950997155
+  },
+  "unweighted_minus_reference": {
+    "balanced_lr_raw": {
+      "roc_auc": {
+        "delta": 0.00024075387356536915,
+        "ci_low": -6.237988058568058e-05,
+        "ci_high": 0.0005405811619031226,
+        "verdict": "no clear difference"
+      },
+      "pr_auc": {
+        "delta": 0.0006890140157143065,
+        "ci_low": 0.00016414388314728998,
+        "ci_high": 0.0011540609774469716,
+        "verdict": "no clear difference"
+      },
+      "brier_score": {
+        "delta": -0.11379197839307893,
+        "ci_low": -0.11715798773323462,
+        "ci_high": -0.1104378525162758,
+        "verdict": "better"
+      },
+      "log_loss": {
+        "delta": -0.26337446540787424,
+        "ci_low": -0.27158830346042945,
+        "ci_high": -0.25547224632514454,
+        "verdict": "better"
+      }
+    },
+    "balanced_lr_platt": {
+      "roc_auc": {
+        "delta": 0.00024075387356536915,
+        "ci_low": -6.237988058568058e-05,
+        "ci_high": 0.0005405811619031226,
+        "verdict": "no clear difference"
+      },
+      "pr_auc": {
+        "delta": 0.0006890140157143065,
+        "ci_low": 0.00016414388314728998,
+        "ci_high": 0.0011540609774469716,
+        "verdict": "no clear difference"
+      },
+      "brier_score": {
+        "delta": 1.4402264310875434e-05,
+        "ci_low": -7.318184839337492e-05,
+        "ci_high": 0.00011187573771387036,
+        "verdict": "no clear difference"
+      },
+      "log_loss": {
+        "delta": 0.0001487585826340787,
+        "ci_low": -0.00016361257203008489,
+        "ci_high": 0.00047501359096834423,
+        "verdict": "no clear difference"
+      }
+    },
+    "xgboost_selected_raw": {
+      "roc_auc": {
+        "delta": 0.0001522549278766272,
+        "ci_low": -0.002229796256690633,
+        "ci_high": 0.002512578625750994,
+        "verdict": "no clear difference"
+      },
+      "pr_auc": {
+        "delta": -0.0001528429858489999,
+        "ci_low": -0.00448428912592774,
+        "ci_high": 0.0042278143138997,
+        "verdict": "no clear difference"
+      },
+      "brier_score": {
+        "delta": 0.00010019743718467367,
+        "ci_low": -0.00012397845090056608,
+        "ci_high": 0.00033056421694145144,
+        "verdict": "no clear difference"
+      },
+      "log_loss": {
+        "delta": 0.00017812555073665193,
+        "ci_low": -0.0005209597382302672,
+        "ci_high": 0.0009147678492112772,
+        "verdict": "no clear difference"
+      }
+    }
+  },
+  "margins": {
+    "roc_auc": 0.002,
+    "pr_auc": 0.002,
+    "brier_score": 0.0005,
+    "log_loss": 0.002
+  },
+  "bootstrap": {
+    "bootstrap_resamples": 1000,
+    "seed": 42
+  },
+  "validation_rows": 21784,
+  "test_rows_available_to_model": 0,
+  "inputs_sha256": {
+    "reports/tabular/raw_predictions/logistic_regression_calibration.csv": "d16f15f0b6dbd27ed93dba4f96fb19631b5a22cabb4acdfe13fb8ef95835a532",
+    "reports/tabular/raw_predictions/logistic_regression_validation.csv": "84d845fcabd097aead2f70f0ca017c324d7abfa6db0a313fe8c851586759fbc9",
+    "reports/tabular/raw_predictions/xgboost_trial1_calibration.csv": "e99ca1e77aa064e68f6c938f89ed8b5f333596ea4f6ca75ddb1a2cf9f10dc2e7",
+    "reports/tabular/raw_predictions/xgboost_trial1_validation.csv": "d7eceaca0ebfea99c651c2e5c194ab41bebf8f1bf098ab5393a138d39c074f64",
+    "reports/tabular/raw_predictions/unweighted_lr_v1/calibration.csv": "1a35d98cd6cc2509e47daaa236f628f22295cd23d9deb05c0666335a54574367",
+    "reports/tabular/raw_predictions/unweighted_lr_v1/validation.csv": "b6a2dbb5caf78193d9436fd7b8a99b2d8ea3144d44a0f07cf88e68665b389ba7",
+    "reports/tabular/calibration_metrics.json": "ebaa1cf534aa290120cb6996cccb6b1a6f8ba7ca904497c5a30c01a7e9a3b707",
+    "reports/tabular/calibration_results.csv": "cab00bae59fafe368f99bae94cf2057c16b34cbdd559925344fda7de3653f2b8",
+    "reports/tabular/xgboost_selection.json": "8e566ed2eec8bc11d90de979c909bb24ce5f85cebc6fb1e88ed1852bc2b80f57",
+    "configs/tabular_calibration_v1.toml": "f33418e294f09510c799904e7f7ee3841ea80fb91a6339c28fef467e68c70a5a"
+  },
+  "environment": {
+    "python": "3.13.9",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "pyarrow": "23.0.1",
+    "platform": "Darwin",
+    "machine": "arm64"
+  }
+}

@@ -287,19 +287,14 @@ def _prediction_metadata(frame: pd.DataFrame, candidate: str, set_name: str) -> 
     return metadata
 
 
-def load_candidates(
-    prediction_dir: str | Path,
+def expected_prediction_ids(
     data_dir: str | Path = DEFAULT_DATA_DIR,
     development_config: str | Path = DEFAULT_DEVELOPMENT_CONFIG,
-) -> dict[str, Candidate]:
-    """Read each candidate's two prediction files and attach outcomes by loan_id.
+) -> tuple[dict[str, set[str]], pd.Series]:
+    """Expected loan_ids per set and the outcome of every train and validation loan.
 
-    Expected IDs come from the development roles (calibration) and the manifest
-    (validation), never from the files themselves. Each file is checked with
-    ``evaluate.validate_prediction_frame`` and must have the requested split
-    label and uniform, non-empty model metadata. Both files must name the same
-    model and version. Rows are sorted by loan_id, so every candidate's arrays
-    line up loan for loan.
+    Calibration IDs come from the development roles and validation IDs from the
+    manifest, never from a prediction file. The test split is never included.
     """
     manifest, _ = evaluate.load_manifest(data_dir)
     target = manifest.astype({"loan_id": str}).set_index("loan_id")["target"]
@@ -308,34 +303,58 @@ def load_candidates(
         "calibration": set(roles.index[roles["role"].eq("calibration")]),
         "validation": set(evaluate.get_split_targets(manifest, "validation")["loan_id"].astype(str)),
     }
+    return expected_ids, target
 
-    candidates = {}
-    for name in CANDIDATES:
-        sets = {}
-        metadata = {}
-        for set_name in SETS:
-            frame = pd.read_csv(
-                Path(prediction_dir) / f"{name}_{set_name}.csv", dtype={"loan_id": str}
-            )
-            evaluate.validate_prediction_frame(frame, expected_ids[set_name])
-            metadata[set_name] = _prediction_metadata(frame, name, set_name)
-            frame = frame.sort_values("loan_id", ignore_index=True)
-            sets[set_name] = Scores(
-                loan_ids=frame["loan_id"].to_numpy(dtype=str),
-                p=frame["p_default_tabular"].to_numpy(dtype=np.float64),
-                y=target.loc[frame["loan_id"]].to_numpy(dtype=np.int64),
-            )
-        for column in ("model_name", "model_version"):
-            if metadata["calibration"][column] != metadata["validation"][column]:
-                raise ValueError(ERROR_MESSAGES["prediction_metadata_mismatch"].format(
-                    candidate=name, column=column,
-                    calibration=metadata["calibration"][column],
-                    validation=metadata["validation"][column],
-                ))
-        candidates[name] = Candidate(
-            name, metadata["calibration"]["model_name"], metadata["calibration"]["model_version"], sets
+
+def load_candidate(
+    name: str, paths: dict[str, Path], expected_ids: dict[str, set[str]], target: pd.Series
+) -> Candidate:
+    """Read one candidate's calibration and validation files and attach outcomes by loan_id.
+
+    Each file is checked with ``evaluate.validate_prediction_frame`` and must
+    have the requested split label and uniform, non-empty model metadata. Both
+    files must name the same model and version. Rows are sorted by loan_id, so
+    every candidate's arrays line up loan for loan.
+    """
+    sets = {}
+    metadata = {}
+    for set_name in SETS:
+        frame = pd.read_csv(paths[set_name], dtype={"loan_id": str})
+        evaluate.validate_prediction_frame(frame, expected_ids[set_name])
+        metadata[set_name] = _prediction_metadata(frame, name, set_name)
+        frame = frame.sort_values("loan_id", ignore_index=True)
+        sets[set_name] = Scores(
+            loan_ids=frame["loan_id"].to_numpy(dtype=str),
+            p=frame["p_default_tabular"].to_numpy(dtype=np.float64),
+            y=target.loc[frame["loan_id"]].to_numpy(dtype=np.int64),
         )
-    return candidates
+    for column in ("model_name", "model_version"):
+        if metadata["calibration"][column] != metadata["validation"][column]:
+            raise ValueError(ERROR_MESSAGES["prediction_metadata_mismatch"].format(
+                candidate=name, column=column,
+                calibration=metadata["calibration"][column],
+                validation=metadata["validation"][column],
+            ))
+    return Candidate(
+        name, metadata["calibration"]["model_name"], metadata["calibration"]["model_version"], sets
+    )
+
+
+def load_candidates(
+    prediction_dir: str | Path,
+    data_dir: str | Path = DEFAULT_DATA_DIR,
+    development_config: str | Path = DEFAULT_DEVELOPMENT_CONFIG,
+) -> dict[str, Candidate]:
+    """Load every shortlisted candidate from ``<prediction_dir>/<candidate>_<set>.csv``."""
+    expected_ids, target = expected_prediction_ids(data_dir, development_config)
+    return {
+        name: load_candidate(
+            name,
+            {set_name: Path(prediction_dir) / f"{name}_{set_name}.csv" for set_name in SETS},
+            expected_ids, target,
+        )
+        for name in CANDIDATES
+    }
 
 
 def fit_raw(p: np.ndarray, y: np.ndarray, eps: float) -> Calibrator:
