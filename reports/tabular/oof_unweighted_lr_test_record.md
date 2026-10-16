@@ -54,3 +54,26 @@ Neither pipeline can read test labels. `evaluate.load_manifest` drops test rows 
 reject `split="test"` before opening any file, and every manifest records `test_rows_available_to_model: 0`.
 Only one test reads `data/test_ids.csv`, and it reads loan IDs only, to prove that none appear in the OOF
 export.
+
+## 5. Windows review and portability checks (17 October 2026)
+
+The full suite was rerun on Windows AMD64, Python 3.13.15, with the package pins
+above. Code tested: `d3accde`. The checkout used `core.autocrlf=true`, and
+`LENDINGCLUB_RAW_CSV` pointed to the verified CSV outside the repository.
+`CALIBRATION_RECOMPUTE=1` was enabled.
+
+**Result: 366 passed, 0 failed, 0 skipped, in 473.93 seconds.** This includes the
+environment-locked refit that could not run on the author's Mac, both new
+real-data refits, the full calibration rerun and the comparison-report rebuild.
+
+The follow-up adds 23 checksum tests. Verification now accepts LF/CRLF conversion
+in UTF-8 CSV, JSON and TOML files, but still rejects changed content, missing or
+extra inputs and incorrect current hashes. The raw CSV must match the locked
+byte checksum even when stored elsewhere. Binary files, including Parquet, keep
+strict byte checks.
+
+Runners still record actual file-byte hashes. A regenerated report keeps its own
+input hash table; the reproduction test verifies those hashes separately before
+comparing the report's results and wording. Prediction comparisons retain their
+original numerical tolerances. No model settings, split files, feature contracts,
+committed predictions or reference calibration results changed in this follow-up.
