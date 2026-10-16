@@ -33,6 +33,16 @@ OUTPUT_SCHEMA = pa.schema(
 )
 
 
+def parquet_writer_metadata(path: str | Path) -> dict[str, str]:
+    """Read the writer details from the file, not the current Python environment."""
+    footer = pq.read_metadata(path)
+    pandas_metadata = json.loads(footer.metadata[b"pandas"])
+    return {
+        "created_by": footer.created_by,
+        "pandas_version": pandas_metadata["pandas_version"],
+    }
+
+
 def description_distress_density(description: object) -> float:
     """Count exact keyword tokens / all word tokens in the cleaned description.
 
@@ -178,6 +188,7 @@ def export_description_distress(
             "test_rows_exported": 0,
             "outcome_columns_read": [],
             "parquet_sha256": sha256_file(output_path),
+            "parquet_writer": parquet_writer_metadata(output_path),
             "provenance": provenance,
         }
         metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")

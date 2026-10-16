@@ -21,6 +21,10 @@
   ],
   "outcome_columns_read": [],
   "parquet_sha256": "2ae52d86b1b59bed5c6d62ea85fd0525e5facd5b90d33970d337d68ae676b3e5",
+  "parquet_writer": {
+    "created_by": "parquet-cpp-arrow version 16.1.0",
+    "pandas_version": "2.2.2"
+  },
   "positive_density_rows_by_split": {
     "train": 4661,
     "validation": 814

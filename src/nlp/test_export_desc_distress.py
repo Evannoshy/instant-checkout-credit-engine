@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
@@ -128,6 +129,23 @@ def test_export_round_trip_order_isolation_and_chunk_independence(source, tmp_pa
     assert metadata["outcome_columns_read"] == []
     assert metadata["test_rows_exported"] == 0
     assert metadata["parquet_sha256"] == first_hash
+    assert metadata["parquet_writer"] == {
+        "created_by": f"parquet-cpp-arrow version {pa.__version__}",
+        "pandas_version": pd.__version__,
+    }
+
+
+def test_writer_metadata_comes_from_the_file_not_the_reader(monkeypatch):
+    root = Path(__file__).resolve().parents[2]
+    path = root / "data/nlp/desc_distress_keyword_density.parquet"
+    footer = pq.read_metadata(path)
+    expected = {
+        "created_by": footer.created_by,
+        "pandas_version": json.loads(footer.metadata[b"pandas"])["pandas_version"],
+    }
+    monkeypatch.setattr(pd, "__version__", "different-reader-version")
+    monkeypatch.setattr(pa, "__version__", "different-reader-version")
+    assert export.parquet_writer_metadata(path) == expected
 
 
 @pytest.mark.parametrize("defect", [
@@ -185,3 +203,4 @@ def test_committed_export_matches_frozen_ids_and_training_eda():
     assert train.gt(0).sum() == round((summary["n_loans"] * summary["desc_distress_mention_rate"]).sum())
     metadata = json.loads((root / "reports/nlp/desc_distress_export_metrics.json").read_text())
     assert metadata["parquet_sha256"] == sha256_file(path)
+    assert metadata["parquet_writer"] == export.parquet_writer_metadata(path)

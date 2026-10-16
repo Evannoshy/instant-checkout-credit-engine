@@ -57,9 +57,13 @@ python -m src.nlp.export_desc_distress
 ```
 
 The command writes the Parquet and `reports/nlp/desc_distress_export_metrics.json`.
-The metadata records input hashes, the keyword set, split counts and the output
-checksum. Use `--data-dir`, `--output`, `--metadata`, or `--chunksize` to override
-the defaults.
+The metadata records input hashes, the keyword set, split counts, the output
+checksum and the writer details read from the Parquet footer. The committed file
+was written with pandas 2.2.2 and Arrow 16.1.0. Rebuilding with the current pins
+(pandas 3.0.5 and Arrow 23.0.1) gives identical IDs, values and row order, but a
+different file checksum because the serialization and embedded metadata differ.
+Compare those contents separately from byte identity when changing writer versions.
+Use `--data-dir`, `--output`, `--metadata`, or `--chunksize` to override the defaults.
 
 ```python
 import pandas as pd
