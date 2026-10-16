@@ -256,7 +256,10 @@ def test_real_oof_refit_reproduces_the_committed_scores(tmp_path: Path) -> None:
     )
     actual = pd.read_parquet(tmp_path / "oof.parquet")
     assert rerun["rows"] == saved["rows"]
-    assert rerun["inputs_sha256"] == saved["inputs_sha256"]
+    provenance.verify_reproduced_inputs(
+        saved["inputs_sha256"], rerun["inputs_sha256"],
+        raw_csv_path=Path(os.environ["LENDINGCLUB_RAW_CSV"]), data_dir=REAL_DATA_DIR,
+    )
     assert actual["loan_id"].equals(committed["loan_id"])
     assert actual["fold_id"].equals(committed["fold_id"])
     np.testing.assert_allclose(

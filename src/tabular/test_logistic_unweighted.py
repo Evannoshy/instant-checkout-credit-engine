@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.tabular import calibrate, evaluate, logistic_baseline, logistic_unweighted, preprocess
+from src.tabular import calibrate, evaluate, logistic_baseline, logistic_unweighted, preprocess, provenance
 from src.tabular.test_xgboost_baseline import make_synthetic
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -223,7 +223,7 @@ def test_committed_files_cover_every_calibration_and_validation_loan() -> None:
         evaluate.validate_prediction_frame(frame, expected_ids[set_name])
         assert frame["split"].eq(set_name).all()
         assert frame["model_version"].eq(logistic_unweighted.MODEL_VERSION).all()
-        assert manifest["files"][path.name]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+        provenance.verify_file_checksum(path, manifest["files"][path.name]["sha256"], allow_crlf=True)
 
 
 @pytest.mark.skipif(
@@ -237,7 +237,10 @@ def test_real_refit_reproduces_committed_unweighted_predictions(tmp_path: Path) 
         REAL_DATA_DIR, Path(os.environ["LENDINGCLUB_RAW_CSV"]), tmp_path
     )
     assert frozen_v1_checksums() == before
-    assert rerun["inputs_sha256"] == saved["inputs_sha256"]
+    provenance.verify_reproduced_inputs(
+        saved["inputs_sha256"], rerun["inputs_sha256"],
+        raw_csv_path=Path(os.environ["LENDINGCLUB_RAW_CSV"]), data_dir=REAL_DATA_DIR,
+    )
     assert rerun["scoring_rows"] == saved["scoring_rows"]
     for name in ("calibration.csv", "validation.csv"):
         expected = pd.read_csv(COMMITTED_DIR / name, dtype={"loan_id": str})

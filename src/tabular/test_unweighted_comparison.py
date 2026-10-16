@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.tabular import calibrate, unweighted_comparison, unweighted_report
+from src.tabular import calibrate, provenance, unweighted_comparison, unweighted_report
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 REAL_DATA_DIR = REPOSITORY_ROOT / "data"
@@ -251,7 +251,7 @@ def test_committed_comparison_and_report_are_reproduced_from_committed_files(tmp
     rebuilt = unweighted_comparison.run_comparison(
         REAL_DATA_DIR, report_path=tmp_path / "report.md", results_path=tmp_path / "result.json"
     )
-    assert rebuilt["inputs_sha256"] == saved["inputs_sha256"]
+    provenance.verify_reproduced_inputs(saved["inputs_sha256"], rebuilt["inputs_sha256"])
     for actual, expected in zip(rebuilt["candidates"], saved["candidates"], strict=True):
         for key, value in expected.items():
             if isinstance(value, float):
@@ -264,6 +264,10 @@ def test_committed_comparison_and_report_are_reproduced_from_committed_files(tmp
             assert actual["verdict"] == expected["verdict"]
             for bound in ("delta", "ci_low", "ci_high"):
                 assert actual[bound] == pytest.approx(expected[bound], rel=1e-9, abs=1e-12)
-    assert (tmp_path / "report.md").read_text(encoding="utf-8") == (
+    assert (tmp_path / "report.md").read_text(encoding="utf-8") == unweighted_report.render_report(rebuilt)
+    # Keep the original hash table for this comparison only, after verifying it
+    # above. A Windows checkout can have different byte hashes, not new results.
+    portable_result = {**rebuilt, "inputs_sha256": saved["inputs_sha256"]}
+    assert unweighted_report.render_report(portable_result) == (
         unweighted_comparison.REPORT_PATH.read_text(encoding="utf-8")
     )
