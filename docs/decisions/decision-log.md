@@ -4,6 +4,20 @@
 **Document owner:** Tabular Track Tech Lead
 **Created:** 7 September 2026
 
+### Reading this log as of 17 October 2026
+
+D-001 through D-010 retain their recorded proposal status; an elapsed gate date
+does not establish approval. The implemented LendingClub evidence lane follows
+D-011 through D-016, with D-012/D-015 providing the exact cohort and target rule.
+The intended checkout label and serving schemas remain separate proposals.
+
+The [calibration comparison](../../reports/tabular/candidate_comparison.md),
+[unweighted comparison](../../reports/tabular/unweighted_lr_comparison.md) and
+[tabular OOF manifest](../../data/tabular/tabular_oof_train_v1_manifest.json)
+record newer work. They do not silently change an accepted feature contract or
+provide a serving release approval. Cross-track fitting/fold and calibration
+compatibility still needs a fusion protocol decision. D-017 remains proposed.
+
 ## 1. Purpose
 
 This log records decisions that affect the tabular track or its contracts with the NLP and fusion/API tracks. It prevents important choices from being buried in chats, notebooks or code.
@@ -225,8 +239,12 @@ Use the Kaggle `adarshsng/lending-club-loan-data-csv` archive whose SHA-256 is
 The source is a historical US accepted-loan proxy and is not representative of
 Singapore BNPL applicants. The raw file is not redistributed through Git.
 
-The evidence target is ultimate `Charged Off`/`Default` versus `Fully Paid`; it is
-not the intended 30+ DPD/90-day product outcome.
+The original source-level target wording included `Charged Off`/`Default` versus
+`Fully Paid`. **Cohort clarification, 17 October 2026:** the accepted v1 cohort
+in D-012, made executable by D-015, includes only `Charged Off = 1` and
+`Fully Paid = 0`. `Default` is excluded. The exact cohort rule takes precedence
+over the earlier source-level shorthand; no label or membership changes here.
+This is not the intended 30+ DPD/90-day product outcome.
 
 ## D-012 - Real-text cohort and split v1
 
