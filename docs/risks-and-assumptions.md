@@ -5,6 +5,21 @@
 **Created:** 7 September 2026  
 **Review cadence:** Weekly; critical changes reviewed immediately
 
+### Evidence update, 17 October 2026
+
+The ratings and dated review targets below originate in the September plan. This
+update reconciles them with committed evidence; it does not invent a gate approval,
+close an unreviewed risk or assign a new deadline on an owner's behalf.
+
+| Items | Current evidence and remaining action |
+|---|---|
+| R-001/R-002, A-002/A-005 | D-011/D-012/D-015 establish a historical LendingClub proxy and ultimate `Charged Off` versus `Fully Paid` target. Representative BNPL data and the proposed 90-day DPD target remain unavailable in the implemented pipeline; source-use conditions still apply. |
+| R-004, A-006 | Structured data and borrower title/purpose/description align to the same locked loans. Transaction narratives are not supplied. OOF fitting histories differ: tabular has 35,234 chronological holdouts; TF-IDF has 86,293 shuffled holdouts and uses tabular calibration months. Resolve fusion roles/time boundaries before combining evidence. |
+| R-008, A-011 | The [candidate comparison](../reports/tabular/candidate_comparison.md) retains balanced LR + Platt under the predeclared rule. XGBoost has not shown a replacement-worthy gain. The [unweighted experiment](../reports/tabular/unweighted_lr_comparison.md) also does not approve replacing that reference. |
+| R-009 | Calibration corrected the balanced LR probability level for its `model_fit` fit. OOF tabular and NLP exports remain raw; the fitted calibrator cannot simply be transferred to other fits or models. Calibration ownership for fusion remains unresolved. |
+| R-010/R-011/R-012 | No completed subgroup/fairness report, tabular reason-candidate validation or full serving latency benchmark is committed. Retain these as outstanding evidence requirements. |
+| R-017 | The [Windows test record](../reports/tabular/oof_unweighted_lr_test_record.md) records 366 passing tabular tests, including raw-data refits, on the pinned runtime. A new checkout still needs its own checks; the exact-environment and LF/CRLF constraints remain relevant. |
+
 ## 1. Purpose
 
 This register makes uncertainty explicit and actionable. A risk is a possible event that could harm the project. An assumption is an unverified statement currently used for planning. Each item has an owner, a validation trigger and a contingency.
@@ -64,17 +79,17 @@ This register makes uncertainty explicit and actionable. A risk is a possible ev
 | A-011 | Logistic regression is acceptable as the final champion | Required for honest model selection | Approve at G0 | Tabular lead | 11 Sep | Document architecture-driven XGBoost constraint and associated trade-off |
 | A-012 | 30 November is the final release/demo date | Drives all milestone dates | Confirm with project co-leads | Project co-leads | 7 Sep | Rebaseline the milestone plan immediately |
 
-## 5. Week 1 issue log
+## 5. Original issue log, reconciled 17 October 2026
 
 | ID | Issue | Blocking? | Owner | Action | Due | Status |
 |---|---|---:|---|---|---|---|
-| I-001 | Tabular analyst has not been named in repository documents | Yes | Tabular lead | Confirm analyst and update owners | 7 Sep | Open |
-| I-002 | Primary product definition is ambiguous between BNPL and microloans | Yes | Project co-leads | Choose one primary prototype or define shared scope | 11 Sep | Open |
-| I-003 | No dataset is documented | Yes for modeling | Project co-leads + analyst | Create Week 2 source assessment | 18 Sep | Open |
-| I-004 | Outcome definition is proposed but not approved | Yes | Tabular lead + co-leads | Review `bad_30dpd_90d` proposal | 11 Sep | Open |
-| I-005 | Cross-track ID/label/split contract is not approved | Yes | Tabular + NLP leads | Hold contract review | 10 Sep | Open |
-| I-006 | Full-system SLO lacks hardware/concurrency boundary | No for G0 if conditional | Fusion/API lead | Draft provisional benchmark contract | 10 Sep | Open |
-| I-007 | Final policy owner is not confirmed | No for Week 1 modeling | Project co-leads | Assign policy owner | Before calibration work | Open |
+| I-001 | Analyst ownership was absent from the initial documents | No for documented experiments | Tabular lead | Keep report authors and handoff owners current | Ongoing | Authors now recorded in logistic, XGBoost and calibration reports |
+| I-002 | Intended product definition is ambiguous between BNPL and microloans | Yes for product claims | Project co-leads | Confirm intended product separately from the LendingClub experiment | Original: 11 Sep | Product decision remains open in this log |
+| I-003 | No dataset was documented | No for proxy modeling | Project co-leads + analyst | Retain source rights/provenance conditions | D-011/D-015 | Evidence source documented; representative BNPL source still absent |
+| I-004 | Outcome definition was proposed but unapproved | No for frozen proxy modeling | Tabular lead + co-leads | Preserve proxy/product label distinction | D-012/D-015 | Proxy target accepted; `bad_30dpd_90d` remains a product proposal |
+| I-005 | Cross-track contract was unapproved | Yes for time-respecting fusion until roles agree | Tabular + NLP leads | Preserve accepted IDs/labels/splits; reconcile OOF fitting and calibration roles | Before fusion fitting | Dataset contract accepted in D-012/D-014/D-015; fusion protocol unresolved |
+| I-006 | Full-system SLO lacks hardware/concurrency boundary | Yes for latency claims | Fusion/API lead | Freeze benchmark with serving implementation | Before latency benchmark | Open; no full-system benchmark committed |
+| I-007 | Final policy owner/threshold is not recorded | Yes for policy adoption | Project co-leads | Record owner, loss assumptions and threshold/refer-band decision | Before policy adoption | Open; existing policy curves are illustrative |
 
 ## 6. Escalation rules
 

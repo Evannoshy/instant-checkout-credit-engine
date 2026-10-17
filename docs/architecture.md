@@ -1,14 +1,30 @@
 # System Architecture
 
-**Document status:** Proposed for G0 review  
-**Version:** 0.1  
-**Date:** 7 September 2026  
-**Owner:** Tabular Track Tech Lead  
+**Document status:** Implementation snapshot plus proposed serving architecture<br>
+**Version:** 0.2<br>
+**Updated:** 17 October 2026 (initial design: 7 September 2026)<br>
+**Owner:** Tabular Track Tech Lead<br>
 **Reviewers:** NLP Track Lead, Fusion/API Lead and project co-leads
 
 ## 1. Purpose
 
-This document defines the preliminary architecture and boundaries of the Instant Checkout Credit Engine. It is intentionally implementation-light during Week 1. The goal is to agree data, model and service contracts before code makes them expensive to change.
+This document separates the implemented offline research pipeline from the intended checkout serving design. Section 1.1 describes the repository today. The remaining diagrams, service contracts, SLOs and operational requirements describe the target architecture unless explicitly linked to an implementation; their presence does not establish delivery or approval.
+
+### 1.1 Implemented pipeline and remaining boundary
+
+The evidence pipeline uses the [locked LendingClub cohort](cohort-definition.md): `loan_id` identifies an originated loan, the target is `Charged Off` versus `Fully Paid`, and text is borrower title/purpose/description. It does not implement the proposed checkout application schema, transaction-text source or 30+ DPD/90-day product label.
+
+| Area | Implemented evidence | Remaining work |
+|---|---|---|
+| Data and features | Shared chronological split, source checksum checks, nine-feature tabular preprocessing, text cleaning | Representative checkout data and production input/freshness schema |
+| Tabular modeling | Constant/LR/XGBoost, bounded search, calibration and unweighted LR comparison under `src/tabular/` | Release package, robustness/subgroup evidence and production policy |
+| NLP | TF-IDF, DistilBERT prototypes, lexical analysis and score/description-only exports under `src/nlp/` | Matched incremental-value comparison and calibrated fusion inputs |
+| Fusion | [Tabular OOF manifest](../data/tabular/tabular_oof_train_v1_manifest.json), NLP score exports | Compatible fold/role protocol, fusion training and evaluation |
+| Serving | Proposed contracts below | API, fallback implementation, compatible model bundle and latency benchmark |
+
+Tabular development uses 59,353 `model_fit` rows and 26,940 calibration rows within the frozen 86,293-row training split; validation has 21,784 rows. The final test remains locked. The [calibration comparison](../reports/tabular/candidate_comparison.md) retains balanced LR + Platt as its reference. The later unweighted experiment does not approve a replacement.
+
+The tabular OOF export contains 35,234 chronological holdout rows; the earliest 24,119 `model_fit` rows are fitting-only. TF-IDF OOF covers all 86,293 training rows using shuffled folds, including months reserved for tabular calibration. DistilBERT uses two 10k-loan fitting sets. These exports cannot be assumed to share fitting histories or calibration isolation because they share IDs. Agree eligible fusion rows, time boundaries and calibration ownership before training or claiming time-respecting fusion evidence. The existing balanced-model exports are raw scores, not calibrated PDs.
 
 ## 2. Architectural principles
 
@@ -30,7 +46,7 @@ flowchart LR
     User[Checkout applicant] --> Checkout[Checkout application]
     Checkout --> Validation[Request and schema validation]
     Validation --> Tabular[Tabular scoring component]
-    Validation --> Text[Transaction-text scoring component]
+    Validation --> Text[Text scoring component]
     Tabular --> Fusion[Late-fusion component]
     Text --> Fusion
     Fusion --> Policy[Decision policy and fallback rules]
@@ -299,12 +315,12 @@ Rollback restores model, transformer, calibrator, schema, reason map and policy 
 | Final policy and claims | Track leads consulted | Project co-leads |
 | Independent validation | Non-author reviewer | Tabular lead |
 
-## 16. Week 1 architecture decisions required
+## 16. Remaining architecture decisions
 
-- Confirm prediction unit and primary label.
-- Confirm which service owns feature transformation.
-- Confirm shared manifest owner and format.
-- Confirm fusion score inputs.
+- Keep the intended checkout prediction unit/label separate from the accepted LendingClub proxy contract in D-012/D-015.
+- Confirm which serving component owns feature transformation and the actual request schema.
+- Reconcile cross-track OOF coverage, fitting months, calibration roles and raw/calibrated score semantics under D-014.
+- Confirm fusion training inputs and the matched evaluation protocol before unlocking the test.
 - Confirm missing-modality fallback.
 - Confirm latency boundary and target hardware assumption.
 - Confirm how explanations appear in the synchronous response.
