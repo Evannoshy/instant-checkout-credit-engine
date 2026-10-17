@@ -7,6 +7,27 @@
 **Effective date:** 7 September 2026  
 **Project period:** 7 September to 30 November 2026
 
+### Repository status, 17 October 2026
+
+This handbook retains the original operating standards and milestone plan. Dates
+and planned deliverables below are not a record of completed gates. For current
+implementation and setup, start with the [README](../README.md) and
+[contribution guide](../CONTRIBUTING.md).
+
+The evidence lane is now the [locked LendingClub cohort](cohort-definition.md),
+with ultimate `Charged Off` versus `Fully Paid` outcomes and borrower-written
+text. D-011 through D-016 govern the source, splits and nine-feature baseline.
+They do not approve the proposed checkout 30+ DPD label or transaction-data schema.
+
+Constant/LR/XGBoost baselines, bounded search, calibration and OOF score exports
+exist under `src/tabular/`. The [calibration report](../reports/tabular/candidate_comparison.md)
+retains balanced LR + Platt as the reference; the
+[unweighted comparison](../reports/tabular/unweighted_lr_comparison.md) does not
+authorize replacing it. The [OOF manifest](../data/tabular/tabular_oof_train_v1_manifest.json)
+covers 35,234 chronological holdout rows, not all 86,293 training loans. NLP folds
+and fitting roles differ and need reconciliation before fusion. Serving, policy,
+release packaging and end-to-end latency remain target deliverables.
+
 ## 1. Purpose
 
 This handbook is the operating manual for the analyst responsible for the tabular track. It explains how to work, what evidence to produce, when to escalate, how quality is assessed and what must be delivered before the project can be considered successful.

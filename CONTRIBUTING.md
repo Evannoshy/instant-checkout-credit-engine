@@ -19,6 +19,53 @@ Suggested branch names:
 - `model/xgb-baseline`
 - `fix/split-leakage`
 
+## Development environments and checks
+
+Run commands from the repository root. Keep track-specific environments: tabular
+reference experiments use Python 3.13.15, while the NLP requirements document
+separate TF-IDF and transformer runtimes. Install the requirements for the track
+you are working on; changing frozen pins requires a new, consistently reproduced
+experiment rather than an automatic dependency upgrade.
+
+For tabular work on the reference Windows runtime:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r src/tabular/requirements.txt
+python -m pytest scripts src/tabular -q
+```
+
+For NLP work, activate a separate environment with the appropriate Python runtime:
+
+```powershell
+python -m pip install -r src/nlp/requirements.txt
+python -m pytest src/nlp -q
+```
+
+The restricted raw CSV and trained transformer checkpoints are not shipped.
+Tests requiring the CSV skip when it is unavailable. To enable raw-data checks
+with the approved source and the calibration rerun:
+
+```powershell
+$env:LENDINGCLUB_RAW_CSV = "C:\approved-data\loan.csv"
+$env:CALIBRATION_RECOMPUTE = "1"
+python -m pytest scripts src/tabular -q -rs
+```
+
+Replace the example path with the approved file location. The source must match
+the SHA-256 in [the cohort contract](docs/cohort-definition.md). Model runners
+default to `data/raw/loan.csv`; use their `--raw-csv` option when supported for an
+external path. The test environment variable is not a universal runner setting.
+Exact XGBoost prediction reproduction additionally requires the environment
+recorded in [the challenger report](docs/tabular-xgboost-report.md); matching
+package versions alone is insufficient. Report passes, failures, skips and the
+runtime actually used. An existing test record is not evidence of a new rerun.
+
+No CI workflow is currently committed. For documentation-only changes, check
+links, cited counts/metrics and the diff; model refits are unnecessary when code,
+configs and evidence artifacts are unchanged.
+
 ## Pull requests
 
 Every pull request must:
@@ -41,6 +88,8 @@ At least one reviewer is required. Problem-definition, label, split, schema, mod
 - Use the shared application/label/split manifest.
 - Fit preprocessing, feature selection, calibration and resampling on allowed development data only.
 - Protect the final test set until the approved evaluation gate.
+- Reconcile fitting months, fold coverage and calibration roles before combining
+  cross-track OOF exports. Shared IDs alone do not prove time-respecting fusion.
 - Evaluate logistic regression and XGBoost on identical rows and metrics.
 - Report uncertainty, calibration and policy trade-offs, not only AUROC.
 - Treat SHAP as a diagnostic; do not describe it as proof of causality, fairness or compliance.

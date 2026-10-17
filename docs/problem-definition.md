@@ -1,18 +1,31 @@
 # Tabular Credit Problem Definition
 
-**Document status:** Proposed for G0 review  
-**Version:** 0.1  
-**Date:** 7 September 2026  
-**Accountable owner:** Tabular Track Tech Lead  
-**Primary author:** Tabular Analyst  
-**Reviewers:** Project co-leads, NLP Track Lead and Fusion/API Lead  
-**Target freeze date:** 11 September 2026
+**Document status:** Intended product proposal with accepted evidence-lane scope<br>
+**Version:** 0.2<br>
+**Updated:** 17 October 2026 (initial proposal: 7 September 2026)<br>
+**Accountable owner:** Tabular Track Tech Lead<br>
+**Primary author:** Tabular Analyst<br>
+**Reviewers:** Project co-leads, NLP Track Lead and Fusion/API Lead<br>
+**Original target freeze date:** 11 September 2026; gate approval is not established by this date
 
 ## 1. Purpose
 
 This document defines the prediction problem for the structured-data component of the Instant Checkout Credit Engine. It exists to keep data collection, labels, features, model training, evaluation, fusion and product claims aligned.
 
-The definitions below are proposals until the G0 review. Items marked as open questions must be resolved or converted into explicit, dated conditions before model training begins.
+The checkout definitions below remain product proposals where no accepted replacement is recorded. Model development now uses the accepted evidence-lane contract summarized in section 1.1. An evidence-lane result does not approve the intended checkout population, label or serving contract.
+
+### 1.1 Current evidence-lane problem
+
+Decisions D-011 through D-016 and the [cohort definition](cohort-definition.md) govern the implemented experiment:
+
+- **Unit/population:** one historical US originated LendingClub loan with a non-whitespace raw description, issued June 2007 through March 2014. Stable `loan_id` values derive from source CSV record numbers.
+- **Target:** ultimate `Charged Off = 1` versus `Fully Paid = 0`. `Default` and all other statuses are excluded from cohort v1. There is no 90-day DPD label in this experiment.
+- **Inputs:** nine approved structured features; NLP uses borrower title, purpose and description, with separate description-only experiments. These are not observed checkout cash-flow or transaction narratives.
+- **Splits:** 86,293 train, 21,784 validation and 14,922 locked test loans. Current tabular comparisons reserve 26,940 training loans for calibration and fit base models on the other 59,353. NLP fitting/fold schemes differ and must be reconciled before fusion.
+- **Selection:** the [calibration comparison](../reports/tabular/candidate_comparison.md) retains balanced LR + Platt; the [unweighted comparison](../reports/tabular/unweighted_lr_comparison.md) does not approve replacing it. Validation has informed selection, so it is not final unbiased evidence.
+- **Boundary:** originated-loan outcomes and selected nonempty descriptions do not establish performance for rejected applicants, all LendingClub loans, Singapore BNPL users or the intended 30+ DPD/90-day outcome.
+
+Sections 2–20 retain the intended product requirements and original open questions. They must not be read as evidence that due-date labels, cash-flow inputs, a policy engine or a serving API exist.
 
 ## 2. Business use case
 
@@ -102,7 +115,7 @@ The data contract must define acceptable freshness by source. If mandatory infor
 
 ## 6. Proposed primary outcome
 
-The current proposal is:
+For the intended checkout product, the proposal is (not the implemented LendingClub target):
 
 > `bad_30dpd_90d = 1` when an originated obligation reaches at least 30 days past due within 90 days of the first contractual due date, or is charged off earlier. It is `0` only after the full 90-day performance window has matured without either event.
 
@@ -342,7 +355,9 @@ If no one dataset supports both structured and text modalities, the team must no
 - Dataset contains `collections_status` updated 1 March 2026.
 - Result: the field is excluded from features even if it is highly predictive, because it was unavailable at decision time and reflects the outcome process.
 
-## 18. Open questions for G0/G1
+## 18. Product questions from the original G0/G1 plan
+
+The source, proxy target and same-loan structured/text alignment now have accepted evidence-lane answers in D-011/D-012/D-015. Those decisions do not settle representative checkout data, product eligibility, a production threshold or time-compatible fusion fitting. The dates below are original planning deadlines, not recorded approvals.
 
 | ID | Question | Decision owner | Required by |
 |---|---|---|---|
@@ -359,7 +374,7 @@ If no one dataset supports both structured and text modalities, the team must no
 
 Until representative evidence is available, approved language is:
 
-> The project is a research prototype investigating whether structured cash-flow and behavioural data, combined with transaction text, can improve credit-risk inference under an instant-checkout latency target.
+> The project is a research prototype comparing structured-data and borrower-text models on historical LendingClub loans. It aims to evaluate score fusion and a low-latency checkout serving design; checkout performance and latency have not yet been validated.
 
 Do not claim:
 
