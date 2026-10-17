@@ -151,6 +151,11 @@ probabilities.** None of them should be read as a probability of default.
 - The fusion tables carry no calibrated score. The v1 Platt mapping belongs to the model fitted
   on all `model_fit` rows, not to the five fold models behind the train scores, so it must never
   be applied to `p_default_tabular_raw` in `fusion_train_v0`.
+- **The three train scores are out-of-sample under different protocols.**
+  - Tabular uses expanding time folds.
+  - TF-IDF uses random 5-fold CV over all 86,293 train loans (`tfidf_tuning_metrics.json`:
+    `shuffle=True`), so a loan's text score can come from a model trained on later loans.
+  - DistilBERT routes loans between two models, so neither scores its own training loans.
 
 ## 6. Test-set non-access
 
