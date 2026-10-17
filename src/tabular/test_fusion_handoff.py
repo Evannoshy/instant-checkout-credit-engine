@@ -1,23 +1,28 @@
-"""Tests for the fusion handoff: the calibrated tabular validation export.
+"""Tests for the fusion handoff: the calibrated tabular validation export and
+the score-file loader.
 
 From the repository root, show each check and its actual pytest result with:
     python -m pytest src/tabular/test_fusion_handoff.py -v -s
 
-The export reads only committed files (the split manifest and ID files, the raw
-prediction CSVs and the merged calibration evidence), so every check here runs
-on the real files and none needs LENDINGCLUB_RAW_CSV. The frame-validation check
-uses a two-row fabricated frame (no borrower data).
+Everything reads only committed files (the split manifest and ID files, the
+prediction CSVs, the NLP and OOF score files and the merged calibration
+evidence), so no check needs LENDINGCLUB_RAW_CSV. Frame and loader checks use
+tiny fabricated frames (no borrower data); OOF checks use edited copies of the
+committed OOF file in a temporary directory.
 """
 
 from __future__ import annotations
 
+import copy
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.tabular import calibrate, fusion_handoff
+from src.nlp.preprocess import sha256_file
+from src.tabular import calibrate, development, fusion_handoff
 
 COMMITTED_PATH = fusion_handoff.CALIBRATED_VAL_PATH
 
@@ -146,3 +151,143 @@ def test_regenerated_export_reproduces_the_committed_file(tmp_path: Path) -> Non
         assert regenerated[column].equals(committed[column]), column
     for column in fusion_handoff.CALIBRATED_PROBABILITY_COLUMNS:
         np.testing.assert_allclose(regenerated[column], committed[column], rtol=1e-10, atol=1e-10)
+
+
+# ---------------------------------------------------------------------------
+# Score-file loader
+
+DISTILBERT_TRAIN = fusion_handoff.EXPECTED_SOURCES["distilbert_train"]
+SCORE_IDS = ["lc_000000001", "lc_000000002", "lc_000000003"]
+
+
+def _score_frame() -> pd.DataFrame:
+    """Three DistilBERT-shaped train scores, with loan_id as pandas ``string`` like the NLP files."""
+    return pd.DataFrame({
+        "loan_id": pd.array(SCORE_IDS, dtype="string"),
+        "split": "train",
+        "prob_default_distilbert": [0.1, 0.5, 0.9],
+        "model_name": "distilbert-base-uncased",
+        "model_version": "nlp-distilbert-10k-v1",
+    })
+
+
+def _load(tmp_path: Path, frame: pd.DataFrame) -> pd.DataFrame:
+    """Write the frame as parquet and load it with the DistilBERT train pins."""
+    path = tmp_path / "scores.parquet"
+    frame.to_parquet(path, index=False)
+    return fusion_handoff.load_score_file(
+        path,
+        probability_column=DISTILBERT_TRAIN["probability_column"],
+        split=DISTILBERT_TRAIN["split"],
+        expected_ids=set(SCORE_IDS),
+        model_name=DISTILBERT_TRAIN["model_name"],
+        allowed_versions=frozenset(DISTILBERT_TRAIN["allowed_versions"]),
+    )
+
+
+def _set(column: str, value):
+    """Corruption that puts ``value`` in the first row of ``column``."""
+    def corrupt(frame: pd.DataFrame) -> pd.DataFrame:
+        values = frame[column].tolist()
+        values[0] = value
+        return frame.assign(**{column: values})
+    return corrupt
+
+
+@pytest.mark.parametrize(
+    "corrupt, message",
+    [
+        pytest.param(_set("loan_id", "lc_000000002"), "duplicate loan_id", id="duplicate"),
+        pytest.param(lambda f: f.iloc[1:], "1 missing, 0 extra", id="missing-id"),
+        pytest.param(_set("loan_id", "lc_000000099"), "1 missing, 1 extra", id="unexpected-id"),
+        pytest.param(_set("split", "validation"), "split must be 'train'", id="wrong-split"),
+        pytest.param(
+            lambda f: f.assign(prob_default_distilbert=["high", "0.5", "0.9"]), "must be numeric", id="text-score"
+        ),
+        pytest.param(_set("prob_default_distilbert", np.nan), "missing prob_default_distilbert", id="nan"),
+        pytest.param(_set("prob_default_distilbert", np.inf), r"within \[0, 1\]", id="inf"),
+        pytest.param(_set("prob_default_distilbert", -0.1), r"within \[0, 1\]", id="below-0"),
+        pytest.param(_set("prob_default_distilbert", 1.1), r"within \[0, 1\]", id="above-1"),
+        pytest.param(_set("model_name", "bert-large"), "model_name must be", id="wrong-model"),
+        pytest.param(_set("model_version", "nlp-distilbert-v2"), "not in the pinned set", id="unknown-version"),
+    ],
+)
+def test_bad_score_files_are_refused(tmp_path: Path, corrupt, message: str) -> None:
+    """Duplicates, missing or unexpected IDs, a wrong split, a bad score, or an unpinned model is refused."""
+    with pytest.raises(ValueError, match=message):
+        _load(tmp_path, corrupt(_score_frame()))
+
+
+def test_a_subset_with_one_of_two_pinned_versions_loads_sorted_with_str_ids(tmp_path: Path) -> None:
+    """A file holding only one of DistilBERT's two pinned versions is accepted; loan_id comes back str and sorted."""
+    frame = _score_frame().assign(model_version="nlp-distilbert-10k-holdout-v1").iloc[::-1]
+    loaded = _load(tmp_path, frame)
+
+    assert loaded["loan_id"].tolist() == SCORE_IDS
+    assert loaded["loan_id"].map(type).eq(str).all()
+
+
+def _load_with_edited_oof(tmp_path: Path, corrupt, *, re_sign: bool) -> None:
+    """Load every source with an edited copy of the OOF file. ``re_sign`` writes a manifest
+    copy whose SHA-256 matches the edit, so the checks after the checksum are reached."""
+    sources = copy.deepcopy(fusion_handoff.EXPECTED_SOURCES)
+    committed = pd.read_parquet(fusion_handoff.REPO_ROOT / sources["tabular_train"]["path"])
+    path = tmp_path / "oof.parquet"
+    corrupt(committed).to_parquet(path, index=False)
+    sources["tabular_train"]["path"] = str(path)
+
+    manifest_path = fusion_handoff.OOF_MANIFEST_PATH
+    if re_sign:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["output"]["sha256"] = sha256_file(path)
+        manifest_path = tmp_path / "oof_manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    fusion_handoff.load_sources(sources=sources, oof_manifest_path=manifest_path)
+
+
+def _first_calibration_id() -> str:
+    roles = development.assign_development_roles(fusion_handoff.DEFAULT_DATA_DIR)
+    return roles.index[roles["role"].eq("calibration")][0]
+
+
+@pytest.mark.parametrize(
+    "corrupt, re_sign, message",
+    [
+        pytest.param(
+            lambda f: f.assign(p_default_tabular_raw=f["p_default_tabular_raw"] * 0.999), False,
+            "Checksum mismatch", id="edited-bytes",
+        ),
+        pytest.param(lambda f: f.iloc[1:], True, "35233 rows", id="row-dropped"),
+        pytest.param(
+            lambda f: f.assign(loan_id=[_first_calibration_id(), *f["loan_id"].iloc[1:]]), True,
+            "outside model_fit", id="calibration-loan",
+        ),
+        pytest.param(
+            lambda f: f.assign(fold_id=[(f["fold_id"].iloc[0] + 1) % 5, *f["fold_id"].iloc[1:]]), True,
+            "fold_id counts", id="fold-moved",
+        ),
+    ],
+)
+def test_oof_file_that_differs_from_its_manifest_or_role_is_refused(
+    tmp_path: Path, corrupt, re_sign: bool, message: str
+) -> None:
+    """The OOF file is refused, naming the source, for changed bytes, a row count, a non-model_fit loan or fold counts
+    that differ from its manifest."""
+    with pytest.raises(ValueError, match=f"tabular_train .*{message}"):
+        _load_with_edited_oof(tmp_path, corrupt, re_sign=re_sign)
+
+
+def test_real_score_files_load_with_the_expected_counts() -> None:
+    """All six committed sources load: 35,234 OOF rows in five folds, full NLP splits, and the
+    DistilBERT train versions 31,060 / 4,174 inside the OOF loans."""
+    frames = fusion_handoff.load_sources()
+
+    assert {name: len(frame) for name, frame in frames.items()} == {
+        "tabular_train": 35_234, "tabular_validation": 21_784,
+        "tfidf_train": 86_293, "tfidf_validation": 21_784,
+        "distilbert_train": 86_293, "distilbert_validation": 21_784,
+    }
+    assert frames["tabular_train"]["fold_id"].value_counts().sort_index().tolist() == [7022, 6033, 7095, 7883, 7201]
+    distilbert = frames["distilbert_train"]
+    inside_oof = distilbert.loc[distilbert["loan_id"].isin(frames["tabular_train"]["loan_id"]), "model_version"]
+    assert inside_oof.value_counts().to_dict() == {"nlp-distilbert-10k-v1": 31_060, "nlp-distilbert-10k-holdout-v1": 4_174}
