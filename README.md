@@ -1,197 +1,112 @@
 # Instant Checkout Credit Engine
 
-A research and engineering prototype for low-latency credit-risk inference at checkout. The proposed system combines a structured-data credit model with a transaction-text model, then fuses their outputs behind a versioned API.
+A research prototype comparing structured-data and borrower-text models for credit risk on a locked historical LendingClub cohort. The longer-term goal is to combine their scores behind a low-latency checkout API.
 
 The project is led by NUS FinTech Society. Ariel and Evan are project co-leads; Evan is the Tabular Track Tech Lead.
 
 ## Project status
 
-**Current phase:** Week 1 - problem definition and architecture  
-**Planning period:** 7 September to 30 November 2026  
-**Next gate:** G0 Problem Freeze on 11 September 2026
+**Repository snapshot:** 17 October 2026<br>
+**Current work:** model comparison, calibration and cross-track score handoffs<br>
+**Planning period:** 7 September to 30 November 2026
 
-No trained model or validated performance result exists yet. The immediate goal is to agree what the model predicts, what data is available at decision time, how outcomes mature, and how the tabular, NLP and fusion tracks share data and scores.
+The repository contains executable preprocessing, constant/logistic/XGBoost baselines, calibration comparisons, TF-IDF and DistilBERT experiments, tests, and versioned score exports. The [tabular calibration report](reports/tabular/candidate_comparison.md) retains balanced logistic regression with Platt calibration as its reference under the predeclared selection rule. The newer [unweighted logistic comparison](reports/tabular/unweighted_lr_comparison.md) does not approve replacing that reference.
 
-## Problem
+Fusion, a serving API, a packaged inference bundle, and end-to-end latency evidence are still pending. There is no measured sub-100 ms serving result in this repository. Gate dates in the [handbook](docs/tabular-analyst-handbook.md) are the original plan; they do not establish that a gate passed.
 
-Traditional credit information can be limited for thin-file applicants. The project investigates whether structured cash-flow and behavioural variables, together with transaction text, can add useful credit-risk information while supporting an instant-checkout user experience.
+## What the current models predict
 
-The proposed prediction unit is one request to finance one checkout basket. The current target proposal is the probability that an originated obligation reaches at least 30 days past due within 90 days of the first contractual due date, or is charged off earlier. This definition remains subject to the G0 review and data feasibility.
+The evidence lane uses **122,999 historical US originated loans** with a non-whitespace raw borrower description and issue months from June 2007 through March 2014. The frozen target is `Charged Off = 1` versus `Fully Paid = 0`; other statuses, including `Default`, are excluded. Text inputs are borrower `title`, `purpose` and `desc`, with separate description-only experiments. They are not bank transaction narratives.
 
-See [the problem definition](docs/problem-definition.md) for the full target, timing, population, exclusions and claim boundaries.
+This is a proxy experiment, not evidence of performance for Singapore BNPL applicants, declined applications or thin-file checkout customers. The proposed product target, 30+ days past due within 90 days of the first due date, remains distinct from the ultimate LendingClub outcome. See the [exact cohort contract](docs/cohort-definition.md), [problem definition](docs/problem-definition.md) and accepted decisions D-011 through D-016 in the [decision log](docs/decisions/decision-log.md).
 
-## Proposed system
+| Frozen split | Issue months | Loans | Use |
+|---|---|---:|---|
+| Train | Jun 2007–Jul 2013 | 86,293 | Model development; tabular roles below |
+| Validation | Aug–Dec 2013 | 21,784 | Reported model comparisons and selection |
+| Test | Jan–Mar 2014 | 14,922 | Locked for final evaluation; unavailable to development loaders |
 
-The initial architecture has three model/service tracks:
+For current tabular comparisons, training is further divided into 59,353 `model_fit` loans (through December 2012) and 26,940 calibration loans (January–July 2013). The initial logistic baseline used all training rows; its results and model version must not be mixed with the later `model_fit` experiments.
 
-1. **Tabular track:** a serious logistic-regression/scorecard baseline and an XGBoost challenger over structured application, affordability, cash-flow and prior-repayment features.
-2. **NLP track:** a compact transaction-text model that produces a text-risk signal from information genuinely available at checkout.
-3. **Fusion/API track:** late fusion over frozen base-model outputs, exposed through a typed service contract with explicit fallback and quality states.
+## Evidence so far
 
-The tabular model produces a risk score, not the final lending decision. The policy layer remains separate from the model and may return `APPROVE`, `DECLINE`, `REFER` or `INSUFFICIENT_DATA`.
+The following are **validation** results on the same 21,784 loans, not final-test or checkout performance. The observed validation bad rate is 0.1514. PR-AUC means average precision.
 
-See [the architecture](docs/architecture.md) for training, inference, data, contract and failure flows.
+| Model | ROC-AUC | PR-AUC | Brier score | Log loss | Evidence |
+|---|---:|---:|---:|---:|---|
+| Balanced tabular LR + Platt | 0.6660 | 0.2575 | 0.1225 | 0.4031 | [Calibration comparison](reports/tabular/candidate_comparison.md) |
+| Selected XGBoost, raw | 0.6661 | 0.2584 | 0.1224 | 0.4030 | [Calibration comparison](reports/tabular/candidate_comparison.md) |
+| Unweighted tabular LR, raw | 0.6662 | 0.2582 | 0.1225 | 0.4032 | [Unweighted comparison](reports/tabular/unweighted_lr_comparison.md) |
+| Tuned TF-IDF + balanced LR, raw | 0.5867 | 0.1944 | 0.2466 | 0.6867 | [NLP tuning report](docs/nlp-tuning-report.md) |
 
-## Evidence strategy
+XGBoost and unweighted LR have not demonstrated a replacement-worthy gain over the calibrated tabular reference under the recorded margins and paired intervals. The TF-IDF probabilities are uncalibrated. These text-only metrics do not establish whether text adds information beyond tabular scores; that needs a matched fusion comparison. DistilBERT reports use smaller training/validation samples and validation-based checkpoint selection, so they are not directly ranked in this table.
 
-The project uses two distinct data lanes unless representative partner data is approved and available:
+## Score handoffs and integration gaps
 
-- **Evidence lane:** permitted real credit data with observed, matured repayment outcomes and reliable timestamps. This supports honest baseline/model evaluation but may only be a proxy for BNPL.
-- **Systems lane:** privacy-safe, BNPL-shaped synthetic data with aligned structured and text fields. This supports schema, API, fusion, latency, load and demo testing only.
+- **Tabular time-based OOF:** `data/tabular/tabular_oof_train_v1.parquet` contains 35,234 held-out `model_fit` loans from five expanding-window folds. The earliest 24,119 loans are fitting-only and have no OOF score. The [manifest](data/tabular/tabular_oof_train_v1_manifest.json) records folds, hashes and score semantics.
+- **TF-IDF OOF:** `data/nlp/tfidf_oof_train.parquet` covers all 86,293 training loans using shuffled stratified folds. Validation scores are in `tfidf_oof_validate.parquet`, despite that filename's `oof` wording. See the [tuning report](docs/nlp-tuning-report.md).
+- **DistilBERT scores:** train and validation Parquets are in `data/nlp/`. Two separately trained 10k-loan models avoid scoring their own fitting loans; the probabilities remain uncalibrated. See [the exporter](src/nlp/export_distilbert_scores.py) and `reports/nlp/distilbert_*metrics.json`.
+- **Description-only distress density:** [the handoff](docs/nlp-desc-distress-export.md) covers 108,077 train/validation loans. D-017 remains proposed; exporting the feature does not add it to `tabular_features_v1`.
 
-Synthetic data must not be used to claim real-world default accuracy, fairness or financial inclusion. Public proxy data must not be presented as representative of Singapore BNPL users unless that is demonstrably true.
+Join by verified `loan_id` and split, never row position. Matching IDs alone does not align fitting histories: shuffled NLP folds can use later months, and NLP training includes the tabular calibration months. Before treating combined scores as time-respecting fusion evidence, agree common fitting/holdout boundaries, calibration roles, eligible rows and a frozen evaluation protocol. Raw balanced-model scores must not be interpreted as calibrated default risk or silently passed through a calibrator fitted to another model.
 
-## Project guardrails
+## Setup and checks
 
-- Use only features available at or before the checkout decision timestamp.
-- Keep label construction separate from feature construction.
-- Never label a declined application as good simply because no repayment default is observed.
-- Use the same application IDs, label version and split manifest across tabular and NLP tracks.
-- Keep the final out-of-time test set locked until the agreed evaluation gate.
-- Treat logistic regression as a real champion candidate, not a ceremonial baseline.
-- Treat SHAP as a model diagnostic. It does not prove causality, fairness or regulatory compliance.
-- Commit no secrets, live PII, raw bank transactions or restricted datasets.
-- State performance and latency with the model/data version, sample size, split, hardware and measurement protocol.
-- Describe the November result as a research prototype unless the evidence justifies a narrower or stronger statement.
+Run from the repository root. Use separate environments for the two tracks; their recorded Python runtimes differ. The frozen XGBoost search/prediction reproduction requires Windows AMD64 and Python 3.13.15 as recorded in [the XGBoost report](docs/tabular-xgboost-report.md). See [Contributing](CONTRIBUTING.md) for test and raw-data details.
 
-## Provisional performance objectives
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r src/tabular/requirements.txt
+python -m pytest scripts src/tabular -q
+```
 
-These are engineering objectives, not validated results:
+The restricted raw CSV is not included. Tests needing it skip when unavailable; exact runtime checks still apply. Rebuilding models requires the approved `loan.csv` whose SHA-256 is recorded in the cohort contract. Point `LENDINGCLUB_RAW_CSV` at it for raw-data tests; model runners use their documented `--raw-csv` option or default `data/raw/loan.csv`.
 
-- Compare models with AUROC, PR-AUC, Brier score, log loss and calibration plots.
-- Report approval-rate/bad-rate and illustrative expected-loss/value curves.
-- Use time-aware validation and confidence intervals.
-- Evaluate missingness, time shift, feature-family ablations and supported subgroups.
-- Target warmed tabular preprocessing + prediction + calibration p95 latency of at most 10 ms on agreed hardware.
-- Target warmed full-system p95 latency of at most 100 ms under a frozen end-to-end benchmark.
+With approved data and the recorded environment, the tabular experiment sequence is:
 
-Cold start, explanation time, concurrency, payload size and target hardware must be reported separately or explicitly included in the benchmark.
+```powershell
+python -m src.tabular.xgboost_baseline compare
+python -m src.tabular.xgboost_baseline ablate
+python -m src.tabular.xgboost_search
+python -m src.tabular.lexical_ablation
+python -m src.tabular.raw_predictions
+python -m src.tabular.calibrate
+python -m src.tabular.export_oof_scores
+python -m src.tabular.logistic_unweighted
+python -m src.tabular.unweighted_comparison
+```
+
+These commands regenerate evidence artifacts. Use a working branch and review the resulting changes. The [Windows test record](reports/tabular/oof_unweighted_lr_test_record.md) documents the existing reference run; it is not a test result for every future checkout.
 
 ## Repository layout
 
 ```text
 .
-|-- README.md
-|-- updated-pitchdeck.pdf
-`-- docs/
-    |-- architecture.md
-    |-- problem-definition.md
-    |-- reading-list.md
-    |-- risks-and-assumptions.md
-    |-- tabular-analyst-handbook.md
-    `-- decisions/
-        `-- decision-log.md
-```
-
-Code, configuration, tests and data documentation will be introduced after G0 as their contracts become stable. Do not create empty folders purely for appearance; add each area with its first owned artifact.
-
-## Target repository layout
-
-By the model-development and release phases, the repository should converge on:
-
-```text
-.
-|-- .github/
-|   |-- ISSUE_TEMPLATE/
-|   |-- workflows/ci.yml
-|   `-- pull_request_template.md
-|-- configs/
-|   |-- data.yaml
-|   |-- features.yaml
-|   |-- model_logistic.yaml
-|   |-- model_xgb.yaml
-|   `-- evaluation.yaml
-|-- data/
-|   |-- README.md
-|   `-- fixtures/
-|-- docs/
-|   |-- architecture.md
-|   |-- problem-definition.md
-|   |-- data-source-assessment.md
-|   |-- data-sheet.md
-|   |-- feature-dictionary.md
-|   |-- validation-plan.md
-|   |-- validation-report.md
-|   |-- fairness-report.md
-|   |-- explanation-and-reason-policy.md
-|   |-- model-card-tabular.md
-|   |-- monitoring-and-rollback.md
-|   |-- reading-list.md
-|   |-- risks-and-assumptions.md
-|   |-- tabular-analyst-handbook.md
-|   `-- decisions/decision-log.md
-|-- notebooks/
-|   |-- 01_data_audit.ipynb
-|   |-- 02_eda.ipynb
-|   |-- 03_baselines.ipynb
-|   |-- 04_xgboost_experiments.ipynb
-|   `-- 05_calibration_explainability.ipynb
-|-- reports/
-|   |-- figures/
-|   `-- tables/
-|-- scripts/
-|   |-- reproduce_tabular.ps1
-|   `-- generate_synthetic_fixture.py
-|-- src/credit_engine/
-|   |-- tabular/
-|   |   |-- schema.py
-|   |   |-- ingest.py
-|   |   |-- labels.py
-|   |   |-- split.py
-|   |   |-- features.py
-|   |   |-- train.py
-|   |   |-- calibrate.py
-|   |   |-- evaluate.py
-|   |   |-- explain.py
-|   |   `-- infer.py
-|   |-- nlp/
-|   |-- fusion/
-|   `-- api/
-|-- tests/
-|   |-- unit/
-|   |-- data/
-|   |-- contract/
-|   `-- integration/
-|-- .env.example
-|-- .gitignore
-|-- CODEOWNERS
+|-- .github/pull_request_template.md
+|-- configs/                 # Frozen TOML data, feature and experiment contracts
+|-- data/                    # Shared IDs/manifests and reviewed derived score tables
+|-- docs/                    # Contracts, design, analysis and limitations
+|-- reports/                 # Aggregate metrics, prediction exports and figures
+|-- scripts/                 # Cohort reproduction and data-integrity checks
+|-- src/
+|   |-- tabular/             # Preprocessing, models, calibration, OOF and tests
+|   `-- nlp/                 # Text preprocessing, models, exports, notebooks and tests
 |-- CONTRIBUTING.md
-|-- Dockerfile
-|-- LICENSE
-|-- README.md
-|-- pyproject.toml
-`-- dependency lock file
+`-- updated-pitchdeck.pdf
 ```
 
-The repository should contain code, configuration, tiny synthetic fixtures, documentation and reproducible aggregate evidence. It should not contain raw consumer data, credentials, local environments, experiment caches or unrestricted collections of trained model binaries.
+The deck and original milestone plans are planning artifacts. Current claims should follow the evidence reports. CI workflows, fusion/API source, a Dockerfile and a release model card have not yet been added.
 
-## Documentation
+## Guardrails and next work
 
-- [Problem definition](docs/problem-definition.md)
-- [Architecture](docs/architecture.md)
-- [Decision log](docs/decisions/decision-log.md)
-- [Risks and assumptions](docs/risks-and-assumptions.md)
-- [Tabular analyst handbook](docs/tabular-analyst-handbook.md)
-- [Team reading pack](docs/reading-list.md)
-- [Pitch deck](updated-pitchdeck.pdf)
+- Preserve frozen cohort IDs, labels, features and experiment configurations; changes need a new version and decision record.
+- Keep the final test locked until an approved evaluation gate. Validation has already informed selection and is not an untouched final estimate.
+- Resolve fusion fold/role compatibility and compare tabular-only, text-only and fused models on identical rows.
+- Complete supported subgroup/robustness checks, loss scenarios and policy ownership before adopting decision thresholds.
+- Package compatible preprocessing, model and calibration artifacts; implement contract/fallback tests and benchmark latency on agreed hardware.
+- Keep raw/restricted data, secrets, local environments and model binaries out of Git. Synthetic systems data cannot establish real-world accuracy, fairness or inclusion.
 
-## Week 1 definition of done
+See the [architecture](docs/architecture.md), [risks and assumptions](docs/risks-and-assumptions.md), [NLP limitations](docs/nlp-pipeline-limitations.md), [analyst handbook](docs/tabular-analyst-handbook.md) and [reading pack](docs/reading-list.md).
 
-Week 1 is complete only when:
-
-- The prediction unit, intended population, outcome and performance window are approved.
-- The decision-time feature boundary and label maturity rules are approved.
-- The treatment of declined and censored applications is explicit.
-- The tabular, NLP and fusion tracks agree shared IDs, label version, splits and score semantics.
-- The data-source decision is converted into a Week 2 plan.
-- The architecture separates offline training, online inference, labels and audit-only data.
-- Open risks and assumptions have owners and dates.
-- The Tabular Track Tech Lead records `GO`, `GO WITH CONDITIONS` or `NO-GO` at G0.
-
-## Development status
-
-There is not yet an executable training or serving environment. Setup instructions will be added with the first implementation PR after the problem, data and interface contracts pass G0. Until then, contributors should work through reviewable documentation PRs and avoid committing generated or restricted artifacts.
-
-## Governance and limitations
-
-This repository demonstrates technical and model-risk practices for an educational project. It is not legal, regulatory, privacy, credit-risk or information-security advice. Any real lending use would require representative data, independent validation, data rights and consent review, security controls, production monitoring, human/accountability processes and qualified jurisdiction-specific review.
+This is an educational research prototype. Production readiness, fairness, affordability, inclusion, causal explanations and regulatory compliance have not been established.

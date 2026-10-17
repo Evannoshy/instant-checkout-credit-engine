@@ -22,7 +22,8 @@ build/
 # Notebooks
 .ipynb_checkpoints/
 
-# Data: only documentation and reviewed synthetic fixtures belong in Git
+# Raw/intermediate data stays local; reviewed split manifests, derived score
+# exports, documentation and synthetic fixtures are tracked explicitly.
 data/raw/
 data/interim/
 data/processed/
