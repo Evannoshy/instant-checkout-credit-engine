@@ -1,83 +1,35 @@
-"""Fusion handoff (fusion-handoff-v0): calibrated tabular validation scores and
-checked base-model score files.
+"""Fusion handoff (fusion-handoff-v0): join, check and record base-model scores.
 
-Join, check and record; never compute a new score.
+Writes:
+- data/tabular/tabular_calibrated_val.parquet: the balanced logistic model's raw
+  validation scores and the same scores through the tabular_calibration_v1 Platt
+  mapping. The mapping is refitted on calibration rows only and must reproduce
+  calibration_metrics.json and calibration_results.csv (within 1e-6) before
+  anything is written.
+- data/fusion/fusion_train_v0.parquet (35,234 OOF-scored model_fit loans) and
+  data/fusion/fusion_val_v0.parquet (21,784 validation loans): one row per loan
+  with the three raw scores p_default_tabular_raw, prob_default_tfidf and
+  prob_default_distilbert, plus track-prefixed model metadata; train also has
+  tabular_fold_id.
+- reports/tabular/fusion_handoff_v0_manifest.json: versions, source pins and
+  checksums, output checksums and counts, and the environment.
 
-1. Calibrated validation export.
-Writes data/tabular/tabular_calibrated_val.parquet: one row per validation loan
-with the balanced logistic model's raw probability and the same probability
-through the tabular_calibration_v1 Platt mapping.
+Every score file is checked against its pins in ``EXPECTED_SOURCES`` before it
+is used. NLP scores are left-joined onto the tabular rows by loan_id: a missing
+score stops the run and is never filled. No output contains a target or outcome
+column, and the locked test split is never read.
 
-No new score is computed. The raw scores are read from
-reports/tabular/raw_predictions/logistic_regression_validation.csv. The Platt
-mapping is refitted with ``calibrate.fit_platt`` on the calibration-role rows
-only, exactly as src/tabular/calibrate.py fitted it, and must reproduce the
-merged evidence before anything is written:
-- slope and intercept equal calibration_metrics.json, and
-- the raw and Platt validation metric rows equal calibration_results.csv,
-both within ``unweighted_comparison.REPRODUCTION_TOLERANCE`` (1e-6), via the
-same ``check_reference_reproduction`` that guards the unweighted comparison.
-
-Output schema (sorted by loan_id):
-    loan_id, split="validation", p_default_tabular_raw,
-    p_default_tabular_calibrated, model_name, model_version, calibration_version
-
-Validation outcomes are read only to run that reproduction check; they never
-enter the output file. ``fit_platt`` receives calibration rows only, so the
-mapping cannot be fitted on validation labels. The locked test split is never
-read.
-
-2. Score-file loading.
-``load_score_file`` reads one track's scores for one split and checks them
-against the pins in ``EXPECTED_SOURCES``: the shared prediction-frame rules
-(``evaluate.validate_prediction_frame``: columns, duplicates, exact ID coverage
-with missing and extra counts, NaN, numeric, [0, 1]), the split label, one
-pinned model_name, and every model_version in the pinned set. Not every pinned
-version has to appear: DistilBERT train is two models by design. loan_id is
-cast to plain str, because the NLP files store it as pandas ``string``.
-
-``load_sources`` loads all six. The NLP files are checked against the full
-frozen train (86,293) and validation (21,784) ID sets from the manifest, never
-a subset, so a broken NLP file cannot hide behind a later selection. No
-frozen list exists for the tabular OOF loans, so the OOF file defines its own
-expected IDs after these checks: SHA-256 equal to the OOF manifest's (the
-bytes the committed OOF tests verify), row count equal to the manifest's,
-every loan in the model_fit role (so no calibration, validation or test loan),
-and fold_id counts equal to the manifest's. The folds are not re-derived here;
-``test_export_oof_scores.py`` does that and must pass before a handoff run.
-The train and validation sets are checked once for overlap with the locked
-test IDs. Targets are never read for this step.
-
-3. Fusion tables.
-``build_fusion_train`` and ``build_fusion_val`` start from the tabular rows
-(the 35,234 OOF-scored model_fit loans; the 21,784 validation loans) and
-left-join the TF-IDF and DistilBERT scores by loan_id, one-to-one. Every row
-must find a score in every track: a missing score raises and is never filled,
-and an inner join, which would silently drop the loan, is never used. Model
-metadata is track-prefixed before merging. Schemas (sorted by loan_id):
-    train:      loan_id, split, p_default_tabular_raw, prob_default_tfidf,
-                prob_default_distilbert, tabular_fold_id, then
-                {tabular,tfidf,distilbert}_model_{name,version}
-    validation: the same without tabular_fold_id (there are no folds)
-Only the three score columns are proposed fusion inputs; everything else is
-metadata. No target or outcome column is present, and train fold counts must
-equal the OOF manifest's.
-
-The scores are raw, not credit probabilities: class weighting inflates the
-tabular and TF-IDF levels and DistilBERT is uncalibrated. The three train
-scores are out-of-sample under different protocols (tabular: expanding time
-folds; TF-IDF: random 5-fold CV over all train loans; DistilBERT: two models
-routed so neither scores its own training loans).
-
-Run from the repository root:
+Run from the repository root (after test_export_oof_scores.py passes):
     python -m src.tabular.fusion_handoff
 
 Known limitations:
-- The Platt mapping belongs to the model fit on all model_fit rows. It must not
-  be applied to the out-of-fold scores in tabular_oof_train_v1.parquet, which
-  come from five smaller fold models.
-- Calibration here is for reporting and later policy work on validation.
-  Validation grades and never fits; nothing in this module selects anything.
+- The fusion scores are raw, not credit probabilities: class weighting inflates
+  the tabular and TF-IDF levels and DistilBERT is uncalibrated.
+- The three train scores are out-of-sample under different protocols (tabular:
+  time folds; TF-IDF: random 5-fold CV; DistilBERT: two models, neither scoring
+  its own training loans).
+- The Platt mapping belongs to the full model_fit model; it must never be applied
+  to the out-of-fold scores, which come from five smaller fold models.
 """
 
 from __future__ import annotations
@@ -89,9 +41,11 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
+from src.nlp.preprocess import sha256_file
 from src.tabular import calibrate, development, evaluate, export_oof_scores, provenance, raw_predictions
-from src.tabular.preprocess import ALWAYS_PROHIBITED, DEFAULT_DATA_DIR, REPO_ROOT
+from src.tabular.preprocess import ALWAYS_PROHIBITED, DEFAULT_DATA_DIR, REPO_ROOT, load_feature_config
 from src.tabular.unweighted_comparison import (
     BALANCED,
     REFERENCE_METRICS,
@@ -100,10 +54,18 @@ from src.tabular.unweighted_comparison import (
     Entry,
     check_reference_reproduction,
 )
-from src.tabular.xgboost_baseline import validate_runtime
+from src.tabular.xgboost_baseline import count_test_rows_available, validate_runtime
 
+HANDOFF_VERSION = "fusion-handoff-v0"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "data" / "tabular"
 CALIBRATED_VAL_PATH = DEFAULT_OUTPUT_DIR / "tabular_calibrated_val.parquet"
+FUSION_DIR = REPO_ROOT / "data" / "fusion"
+OUTPUT_PATHS = {
+    "tabular_calibrated_val": CALIBRATED_VAL_PATH,
+    "fusion_train_v0": FUSION_DIR / "fusion_train_v0.parquet",
+    "fusion_val_v0": FUSION_DIR / "fusion_val_v0.parquet",
+}
+HANDOFF_MANIFEST_PATH = REPO_ROOT / "reports" / "tabular" / "fusion_handoff_v0_manifest.json"
 OOF_MANIFEST_PATH = export_oof_scores.DEFAULT_MANIFEST_PATH
 
 # The three proposed fusion inputs, by track. Each keeps its source column name.
@@ -263,18 +225,6 @@ def build_calibrated_validation(
         "calibration_version": config["calibration_version"],
     }
     return frame, details
-
-
-def run_calibrated_export(
-    output_path: str | Path = CALIBRATED_VAL_PATH, data_dir: str | Path = DEFAULT_DATA_DIR
-) -> dict[str, Any]:
-    """Check the runtime, build the calibrated validation frame and write it as parquet."""
-    validate_runtime()
-    frame, details = build_calibrated_validation(data_dir)
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    frame.to_parquet(output_path, index=False)
-    return {"rows": len(frame), **details}
 
 
 def read_score_file(path: str | Path) -> pd.DataFrame:
@@ -468,27 +418,145 @@ def build_fusion_val(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return build_fusion_table(base, nlp, FUSION_VAL_COLUMNS, "validation")
 
 
-def build_fusion_tables(
-    data_dir: str | Path = DEFAULT_DATA_DIR, oof_manifest_path: str | Path = OOF_MANIFEST_PATH
-) -> dict[str, pd.DataFrame]:
-    """Load and check every source, then build both fusion tables."""
-    frames = load_sources(data_dir, oof_manifest_path=oof_manifest_path)
-    oof_manifest = json.loads(Path(oof_manifest_path).read_text(encoding="utf-8"))
-    return {"train": build_fusion_train(frames, oof_manifest), "validation": build_fusion_val(frames)}
+def parquet_writer_metadata(path: str | Path) -> dict[str, str]:
+    """Writer details read from the file footer, not the current environment.
+
+    Same record as ``src.nlp.export_desc_distress.parquet_writer_metadata``;
+    not imported because that module needs NLP-only dependencies.
+    """
+    footer = pq.read_metadata(path)
+    return {
+        "created_by": footer.created_by,
+        "pandas_version": json.loads(footer.metadata[b"pandas"])["pandas_version"],
+    }
+
+
+def _output_record(path: Path, frame: pd.DataFrame) -> dict[str, Any]:
+    """Path, checksum, rows, columns, version counts and parquet writer of one written output."""
+    record = {
+        "path": provenance.display_path(path),
+        "sha256": sha256_file(path),
+        "rows": len(frame),
+        "columns": frame.columns.tolist(),
+        "model_version_counts": {
+            column: frame[column].value_counts().sort_index().to_dict()
+            for column in frame.columns if column.endswith("model_version")
+        },
+        "parquet_writer": parquet_writer_metadata(path),
+    }
+    if "tabular_fold_id" in frame.columns:
+        record["tabular_fold_id_counts"] = {
+            str(fold): int(count) for fold, count in frame["tabular_fold_id"].value_counts().sort_index().items()
+        }
+    return record
+
+
+def build_handoff_manifest(
+    data_dir: str | Path,
+    sources: dict[str, dict[str, Any]],
+    source_frames: dict[str, pd.DataFrame],
+    outputs: dict[str, tuple[Path, pd.DataFrame]],
+    calibration_details: dict[str, Any],
+    runtime: dict[str, str],
+) -> dict[str, Any]:
+    """Versions, pinned and hashed sources, written outputs and the guarantees a fusion reader relies on."""
+    _, stats = evaluate.load_manifest(data_dir)
+    source_paths = {name: REPO_ROOT / source["path"] for name, source in sources.items()}
+    evidence = [OOF_MANIFEST_PATH, REFERENCE_METRICS, REFERENCE_RESULTS, calibrate.DEFAULT_CALIBRATION_CONFIG]
+    return {
+        "handoff_version": HANDOFF_VERSION,
+        "status": "exploratory",
+        "dataset_version": stats["dataset_version"],
+        "split_version": stats.get("split_version"),
+        "cohort": stats["cohort"],
+        "feature_set_version": load_feature_config()["feature_set_version"],
+        "development_version": development.load_development_config()["development_version"],
+        "calibration_version": calibration_details["calibration_version"],
+        "sources": {
+            name: {
+                "path": provenance.display_path(source_paths[name]),
+                "sha256": sha256_file(source_paths[name]),
+                "rows": len(source_frames[name]),
+                "pinned": source,
+            }
+            for name, source in sources.items()
+        },
+        "evidence_sha256": provenance.file_checksums(evidence),
+        "outputs": {name: _output_record(path, frame) for name, (path, frame) in outputs.items()},
+        "calibrated_validation": {
+            **{key: value for key, value in calibration_details.items() if key != "calibration_version"},
+            "reproduced_against": [provenance.display_path(REFERENCE_METRICS), provenance.display_path(REFERENCE_RESULTS)],
+        },
+        "fusion_inputs": list(TRACK_SCORES.values()),
+        "metadata_columns": {
+            "fusion_train_v0": [c for c in FUSION_TRAIN_COLUMNS if c not in TRACK_SCORES.values()],
+            "fusion_val_v0": [c for c in FUSION_VAL_COLUMNS if c not in TRACK_SCORES.values()],
+            "note": "Metadata only, not model inputs.",
+        },
+        "score_semantics": (
+            "Raw base-model scores for a stacker, not credit probabilities: class weighting inflates the "
+            "tabular and TF-IDF levels and DistilBERT is uncalibrated. The fusion tables carry no "
+            "calibrated score; the v1 Platt mapping belongs to the model_fit model, not the fold models."
+        ),
+        "targets_included": False,
+        "test_rows_available_to_model": count_test_rows_available(data_dir),
+        "commands": [
+            "python -m pip install -r src/tabular/requirements.txt",
+            "python -m pytest src/tabular/test_export_oof_scores.py -q",
+            "python -m src.tabular.fusion_handoff",
+            "python -m pytest src/tabular/test_fusion_handoff.py -v -s",
+        ],
+        "environment": runtime,
+    }
+
+
+def run_handoff(
+    data_dir: str | Path = DEFAULT_DATA_DIR,
+    output_paths: dict[str, Path] = OUTPUT_PATHS,
+    manifest_path: str | Path = HANDOFF_MANIFEST_PATH,
+    sources: dict[str, dict[str, Any]] = EXPECTED_SOURCES,
+) -> dict[str, Any]:
+    """Check the runtime, build and check every output, then write the parquets and the manifest.
+
+    Every frame is built and checked before the first file is written, so a
+    failed check leaves no partial handoff behind.
+    """
+    runtime = validate_runtime()
+    calibrated, calibration_details = build_calibrated_validation(data_dir)
+    source_frames = load_sources(data_dir, sources)
+    oof_manifest = json.loads(OOF_MANIFEST_PATH.read_text(encoding="utf-8"))
+    frames = {
+        "tabular_calibrated_val": calibrated,
+        "fusion_train_v0": build_fusion_train(source_frames, oof_manifest),
+        "fusion_val_v0": build_fusion_val(source_frames),
+    }
+
+    for name, frame in frames.items():
+        path = Path(output_paths[name])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_parquet(path, index=False, engine="pyarrow")
+    outputs = {name: (Path(output_paths[name]), frame) for name, frame in frames.items()}
+    manifest = build_handoff_manifest(data_dir, sources, source_frames, outputs, calibration_details, runtime)
+    manifest_path = Path(manifest_path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return manifest
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Write the calibrated tabular validation scores.")
+    parser = argparse.ArgumentParser(description="Write the fusion handoff tables and their manifest.")
     parser.add_argument("--data-dir", default=DEFAULT_DATA_DIR, type=Path)
-    parser.add_argument("--output", default=CALIBRATED_VAL_PATH, type=Path)
     args = parser.parse_args()
-    result = run_calibrated_export(args.output, args.data_dir)
-    platt = result["platt_mapping"]
-    print(f"rows={result['rows']} platt slope={platt['slope']:.6f} intercept={platt['intercept']:.6f}")
-    for key, row in result["validation_metrics"].items():
+    manifest = run_handoff(args.data_dir)
+    for name, output in manifest["outputs"].items():
+        print(f"{name}: rows={output['rows']} -> {output['path']}")
+    platt = manifest["calibrated_validation"]["platt_mapping"]
+    print(f"platt slope={platt['slope']:.6f} intercept={platt['intercept']:.6f} (reproduced within "
+          f"{manifest['calibrated_validation']['reproduction_tolerance']})")
+    for key, row in manifest["calibrated_validation"]["validation_metrics"].items():
         print(f"{key}: mean_p={row['mean_p']:.4f} observed={row['prevalence']:.4f} "
-              f"roc_auc={row['roc_auc']:.6f} pr_auc={row['pr_auc']:.6f} "
-              f"brier={row['brier_score']:.6f} log_loss={row['log_loss']:.6f}")
+              f"roc_auc={row['roc_auc']:.6f} brier={row['brier_score']:.6f} log_loss={row['log_loss']:.6f}")
+    print(f"manifest -> {provenance.display_path(HANDOFF_MANIFEST_PATH)}")
 
 
 if __name__ == "__main__":

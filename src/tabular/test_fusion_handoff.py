@@ -22,9 +22,7 @@ import pandas as pd
 import pytest
 
 from src.nlp.preprocess import sha256_file
-from src.tabular import calibrate, development, fusion_handoff
-
-COMMITTED_PATH = fusion_handoff.CALIBRATED_VAL_PATH
+from src.tabular import calibrate, development, fusion_handoff, provenance
 
 
 @pytest.fixture(autouse=True)
@@ -136,21 +134,6 @@ def test_bad_calibrated_frames_are_rejected_naming_the_column(column: str, value
     frame.loc[0, column] = value
     with pytest.raises(ValueError, match=message):
         fusion_handoff.validate_calibrated_frame(frame, {"lc_000000001", "lc_000000002"})
-
-
-def test_regenerated_export_reproduces_the_committed_file(tmp_path: Path) -> None:
-    """Rerunning the export from the committed inputs reproduces the committed parquet
-    (IDs and metadata exactly, probabilities to 1e-10)."""
-    committed = pd.read_parquet(COMMITTED_PATH)
-    result = fusion_handoff.run_calibrated_export(tmp_path / "tabular_calibrated_val.parquet")
-    regenerated = pd.read_parquet(tmp_path / "tabular_calibrated_val.parquet")
-
-    assert result["rows"] == len(committed) == 21_784
-    assert regenerated.columns.tolist() == committed.columns.tolist()
-    for column in ("loan_id", "split", "model_name", "model_version", "calibration_version"):
-        assert regenerated[column].equals(committed[column]), column
-    for column in fusion_handoff.CALIBRATED_PROBABILITY_COLUMNS:
-        np.testing.assert_allclose(regenerated[column], committed[column], rtol=1e-10, atol=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -366,3 +349,44 @@ def test_a_target_column_is_refused(sources) -> None:
             validation.assign(target=0), fusion_handoff.FUSION_VAL_COLUMNS, "validation",
             set(validation["loan_id"]),
         )
+
+
+# ---------------------------------------------------------------------------
+# Committed handoff (run python -m src.tabular.fusion_handoff first)
+
+def test_regenerated_handoff_reproduces_the_committed_files(tmp_path: Path) -> None:
+    """Rerunning the handoff from the committed inputs reproduces all three committed parquets
+    (IDs, fold IDs and metadata exactly, probabilities to 1e-10)."""
+    paths = {name: tmp_path / Path(path).name for name, path in fusion_handoff.OUTPUT_PATHS.items()}
+    fusion_handoff.run_handoff(output_paths=paths, manifest_path=tmp_path / "manifest.json")
+
+    for name, committed_path in fusion_handoff.OUTPUT_PATHS.items():
+        committed = pd.read_parquet(committed_path)
+        regenerated = pd.read_parquet(paths[name])
+        assert regenerated.columns.tolist() == committed.columns.tolist(), name
+        for column in committed.columns:
+            if pd.api.types.is_float_dtype(committed[column]):
+                np.testing.assert_allclose(regenerated[column], committed[column], rtol=1e-10, atol=1e-10)
+            else:
+                assert regenerated[column].equals(committed[column]), (name, column)
+
+
+def test_committed_manifest_matches_the_committed_files_and_pinned_sources() -> None:
+    """The committed manifest's output and source checksums match the files on disk, its pins equal
+    EXPECTED_SOURCES, the OOF source equals the OOF manifest's file, and it keeps targets and test rows out."""
+    manifest = json.loads(fusion_handoff.HANDOFF_MANIFEST_PATH.read_text(encoding="utf-8"))
+    oof_manifest = json.loads(fusion_handoff.OOF_MANIFEST_PATH.read_text(encoding="utf-8"))
+
+    assert manifest["handoff_version"] == "fusion-handoff-v0" and manifest["status"] == "exploratory"
+    for name, output in manifest["outputs"].items():
+        path = fusion_handoff.REPO_ROOT / output["path"]
+        provenance.verify_file_checksum(path, output["sha256"])
+        assert path == fusion_handoff.OUTPUT_PATHS[name]
+        assert len(pd.read_parquet(path)) == output["rows"]
+    for name, source in manifest["sources"].items():
+        provenance.verify_file_checksum(fusion_handoff.REPO_ROOT / source["path"], source["sha256"], allow_crlf=True)
+        assert source["pinned"] == json.loads(json.dumps(fusion_handoff.EXPECTED_SOURCES[name]))
+    assert manifest["sources"]["tabular_train"]["sha256"] == oof_manifest["output"]["sha256"]
+    assert manifest["fusion_inputs"] == list(fusion_handoff.TRACK_SCORES.values())
+    assert manifest["targets_included"] is False
+    assert manifest["test_rows_available_to_model"] == 0
