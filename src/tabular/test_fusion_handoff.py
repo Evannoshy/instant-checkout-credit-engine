@@ -291,3 +291,78 @@ def test_real_score_files_load_with_the_expected_counts() -> None:
     distilbert = frames["distilbert_train"]
     inside_oof = distilbert.loc[distilbert["loan_id"].isin(frames["tabular_train"]["loan_id"]), "model_version"]
     assert inside_oof.value_counts().to_dict() == {"nlp-distilbert-10k-v1": 31_060, "nlp-distilbert-10k-holdout-v1": 4_174}
+
+
+# ---------------------------------------------------------------------------
+# Fusion tables
+
+@pytest.fixture(scope="module")
+def sources() -> dict[str, pd.DataFrame]:
+    """The six committed score files, loaded and checked once."""
+    return fusion_handoff.load_sources()
+
+
+@pytest.fixture(scope="module")
+def oof_manifest() -> dict:
+    return json.loads(fusion_handoff.OOF_MANIFEST_PATH.read_text(encoding="utf-8"))
+
+
+def test_real_fusion_tables_have_the_agreed_rows_columns_and_folds(sources, oof_manifest) -> None:
+    """Train: 35,234 rows with tabular_fold_id at the manifest's counts; validation: 21,784 rows and no
+    fold column; neither has a null, a target or an outcome column."""
+    train = fusion_handoff.build_fusion_train(sources, oof_manifest)
+    validation = fusion_handoff.build_fusion_val(sources)
+
+    assert len(train) == 35_234 and len(validation) == 21_784
+    assert train.columns.tolist() == list(fusion_handoff.FUSION_TRAIN_COLUMNS)
+    assert validation.columns.tolist() == list(fusion_handoff.FUSION_VAL_COLUMNS)
+    assert "tabular_fold_id" not in validation.columns
+    assert train["tabular_fold_id"].value_counts().sort_index().tolist() == [
+        fold["holdout_rows"] for fold in oof_manifest["folds"]
+    ]
+    for table in (train, validation):
+        assert not set(table.columns) & fusion_handoff.OUTCOME_COLUMNS
+        assert not table.isna().any().any()
+
+
+def _drop_one_oof_loan(frames: dict) -> dict:
+    victim = frames["tabular_train"]["loan_id"].iloc[100]
+    return {**frames, "tfidf_train": frames["tfidf_train"].loc[lambda f: f["loan_id"] != victim]}
+
+
+def _duplicate_one_score(frames: dict) -> dict:
+    distilbert = frames["distilbert_train"]
+    return {**frames, "distilbert_train": pd.concat([distilbert, distilbert.iloc[[0]]], ignore_index=True)}
+
+
+@pytest.mark.parametrize(
+    "corrupt, message",
+    [
+        pytest.param(_drop_one_oof_loan, "1 loans have no tfidf score", id="missing-score"),
+        pytest.param(_duplicate_one_score, "one-to-one", id="duplicate-score"),
+    ],
+)
+def test_a_missing_or_duplicated_score_is_refused_never_filled(sources, oof_manifest, corrupt, message) -> None:
+    """A loan without an NLP score, or with two, stops the build instead of being filled or dropped."""
+    with pytest.raises(ValueError, match=message):
+        fusion_handoff.build_fusion_train(corrupt(sources), oof_manifest)
+
+
+def test_shuffled_nlp_scores_still_join_by_loan_id(sources) -> None:
+    """Shuffling the NLP rows leaves the validation table unchanged: scores match by loan_id, not position."""
+    shuffled = {
+        **sources,
+        "tfidf_validation": sources["tfidf_validation"].sample(frac=1, random_state=0),
+        "distilbert_validation": sources["distilbert_validation"].sample(frac=1, random_state=1),
+    }
+    pd.testing.assert_frame_equal(fusion_handoff.build_fusion_val(shuffled), fusion_handoff.build_fusion_val(sources))
+
+
+def test_a_target_column_is_refused(sources) -> None:
+    """A fusion table that carries the target is refused before anything else is checked."""
+    validation = fusion_handoff.build_fusion_val(sources)
+    with pytest.raises(ValueError, match=r"outcome columns \['target'\]"):
+        fusion_handoff.validate_fusion_frame(
+            validation.assign(target=0), fusion_handoff.FUSION_VAL_COLUMNS, "validation",
+            set(validation["loan_id"]),
+        )

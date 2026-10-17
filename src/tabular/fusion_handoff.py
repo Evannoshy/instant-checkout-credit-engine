@@ -48,6 +48,27 @@ and fold_id counts equal to the manifest's. The folds are not re-derived here;
 The train and validation sets are checked once for overlap with the locked
 test IDs. Targets are never read for this step.
 
+3. Fusion tables.
+``build_fusion_train`` and ``build_fusion_val`` start from the tabular rows
+(the 35,234 OOF-scored model_fit loans; the 21,784 validation loans) and
+left-join the TF-IDF and DistilBERT scores by loan_id, one-to-one. Every row
+must find a score in every track: a missing score raises and is never filled,
+and an inner join, which would silently drop the loan, is never used. Model
+metadata is track-prefixed before merging. Schemas (sorted by loan_id):
+    train:      loan_id, split, p_default_tabular_raw, prob_default_tfidf,
+                prob_default_distilbert, tabular_fold_id, then
+                {tabular,tfidf,distilbert}_model_{name,version}
+    validation: the same without tabular_fold_id (there are no folds)
+Only the three score columns are proposed fusion inputs; everything else is
+metadata. No target or outcome column is present, and train fold counts must
+equal the OOF manifest's.
+
+The scores are raw, not credit probabilities: class weighting inflates the
+tabular and TF-IDF levels and DistilBERT is uncalibrated. The three train
+scores are out-of-sample under different protocols (tabular: expanding time
+folds; TF-IDF: random 5-fold CV over all train loans; DistilBERT: two models
+routed so neither scores its own training loans).
+
 Run from the repository root:
     python -m src.tabular.fusion_handoff
 
@@ -70,7 +91,7 @@ import numpy as np
 import pandas as pd
 
 from src.tabular import calibrate, development, evaluate, export_oof_scores, provenance, raw_predictions
-from src.tabular.preprocess import DEFAULT_DATA_DIR, REPO_ROOT
+from src.tabular.preprocess import ALWAYS_PROHIBITED, DEFAULT_DATA_DIR, REPO_ROOT
 from src.tabular.unweighted_comparison import (
     BALANCED,
     REFERENCE_METRICS,
@@ -84,6 +105,18 @@ from src.tabular.xgboost_baseline import validate_runtime
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "data" / "tabular"
 CALIBRATED_VAL_PATH = DEFAULT_OUTPUT_DIR / "tabular_calibrated_val.parquet"
 OOF_MANIFEST_PATH = export_oof_scores.DEFAULT_MANIFEST_PATH
+
+# The three proposed fusion inputs, by track. Each keeps its source column name.
+TRACK_SCORES = {
+    "tabular": "p_default_tabular_raw",
+    "tfidf": "prob_default_tfidf",
+    "distilbert": "prob_default_distilbert",
+}
+TRACK_METADATA = tuple(f"{track}_{field}" for track in TRACK_SCORES for field in ("model_name", "model_version"))
+FUSION_TRAIN_COLUMNS = ("loan_id", "split", *TRACK_SCORES.values(), "tabular_fold_id", *TRACK_METADATA)
+FUSION_VAL_COLUMNS = ("loan_id", "split", *TRACK_SCORES.values(), *TRACK_METADATA)
+# The target and every post-origination outcome field (D-016) must never reach a fusion table.
+OUTCOME_COLUMNS = ALWAYS_PROHIBITED | {"target"}
 
 # Pinned score sources, written verbatim into the handoff manifest. Paths are
 # repository-relative. ``id_set`` names the expected loan_id set: the full
@@ -314,10 +347,10 @@ def tabular_oof_ids(path: str | Path, oof_manifest: dict[str, Any], data_dir: st
     return set(loan_ids)
 
 
-def check_fold_counts(frame: pd.DataFrame, oof_manifest: dict[str, Any]) -> None:
-    """fold_id takes the values 0..n-1 with exactly the holdout counts in the OOF manifest."""
+def check_fold_counts(fold_ids: pd.Series, oof_manifest: dict[str, Any]) -> None:
+    """Fold IDs take the values 0..n-1 with exactly the holdout counts in the OOF manifest."""
     recorded = [fold["holdout_rows"] for fold in oof_manifest["folds"]]
-    counts = frame["fold_id"].value_counts().sort_index()
+    counts = fold_ids.value_counts().sort_index()
     if counts.index.tolist() != list(range(len(recorded))) or counts.tolist() != recorded:
         raise ValueError(f"fold_id counts {counts.to_dict()} differ from the OOF manifest's {recorded}")
 
@@ -350,11 +383,98 @@ def load_sources(
                 extra_columns=tuple(source["extra_columns"]),
             )
             if is_tabular_oof:
-                check_fold_counts(frame, oof_manifest)
+                check_fold_counts(frame["fold_id"], oof_manifest)
         except ValueError as error:
             raise ValueError(f"{name} ({source['path']}): {error}") from error
         frames[name] = frame
     return frames
+
+
+def _with_track_metadata(frame: pd.DataFrame, track: str) -> pd.DataFrame:
+    """Prefix model_name / model_version with the track, so merged tables never get _x / _y columns."""
+    return frame.rename(columns={"model_name": f"{track}_model_name", "model_version": f"{track}_model_version"})
+
+
+def join_scores(base: pd.DataFrame, others: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Left-join each track's scores onto the base rows by loan_id.
+
+    Every base row must find exactly one score in every track: a missing score
+    raises, it is never filled, and an inner join (which would silently drop
+    the loan) is never used. ``validate="one_to_one"`` refuses duplicate IDs.
+    """
+    joined = base
+    for track, scores in others.items():
+        joined = joined.merge(scores, on="loan_id", how="left", validate="one_to_one", indicator=True)
+        if missing := int(joined["_merge"].ne("both").sum()):
+            raise ValueError(f"{missing} loans have no {track} score; a missing score is never filled")
+        joined = joined.drop(columns="_merge")
+    if len(joined) != len(base):
+        raise ValueError(f"The join changed the row count from {len(base)} to {len(joined)}")
+    return joined
+
+
+def validate_fusion_frame(
+    frame: pd.DataFrame, columns: tuple[str, ...], split: str, expected_ids: set[str]
+) -> None:
+    """Require the agreed columns (no target or outcome field), the split, and each track's score
+    to pass ``evaluate.validate_prediction_frame`` as float64 against the exact expected IDs."""
+    if banned := sorted(set(frame.columns) & OUTCOME_COLUMNS):
+        raise ValueError(f"Fusion frame must not contain outcome columns {banned}")
+    if frame.columns.tolist() != list(columns):
+        raise ValueError(f"Fusion frame must have columns {list(columns)}; got {frame.columns.tolist()}")
+    if not frame["split"].eq(split).all():
+        raise ValueError(f"Fusion frame must contain only split {split!r}")
+    for track, score in TRACK_SCORES.items():
+        evaluate.validate_prediction_frame(
+            frame[["loan_id", "split", score, f"{track}_model_name", f"{track}_model_version"]]
+            .set_axis(["loan_id", "split", score, "model_name", "model_version"], axis=1),
+            expected_ids,
+            probability_column=score,
+        )
+        if frame[score].dtype != np.float64:
+            raise ValueError(f"{score} must be float64; got {frame[score].dtype}")
+
+
+def build_fusion_table(
+    base: pd.DataFrame, nlp_frames: dict[str, pd.DataFrame], columns: tuple[str, ...], split: str
+) -> pd.DataFrame:
+    """Join the NLP scores onto the tabular base rows, then check and sort the result.
+
+    The base rows define the table: the NLP frames cover the whole split, so
+    the left join selects the base loans from them after their full check.
+    """
+    others = {
+        track: _with_track_metadata(frame.drop(columns="split"), track) for track, frame in nlp_frames.items()
+    }
+    joined = join_scores(_with_track_metadata(base, "tabular"), others)
+    frame = joined[list(columns)].sort_values("loan_id", ignore_index=True)
+    validate_fusion_frame(frame, columns, split, set(base["loan_id"]))
+    return frame
+
+
+def build_fusion_train(frames: dict[str, pd.DataFrame], oof_manifest: dict[str, Any]) -> pd.DataFrame:
+    """fusion_train_v0: the OOF-scored model_fit loans with all three raw scores and the tabular fold."""
+    base = frames["tabular_train"].rename(columns={"fold_id": "tabular_fold_id"})
+    nlp = {"tfidf": frames["tfidf_train"], "distilbert": frames["distilbert_train"]}
+    frame = build_fusion_table(base, nlp, FUSION_TRAIN_COLUMNS, "train")
+    check_fold_counts(frame["tabular_fold_id"], oof_manifest)
+    return frame
+
+
+def build_fusion_val(frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """fusion_val_v0: every validation loan with all three raw scores (no fold column)."""
+    base = frames["tabular_validation"].rename(columns={"p_default_tabular": "p_default_tabular_raw"})
+    nlp = {"tfidf": frames["tfidf_validation"], "distilbert": frames["distilbert_validation"]}
+    return build_fusion_table(base, nlp, FUSION_VAL_COLUMNS, "validation")
+
+
+def build_fusion_tables(
+    data_dir: str | Path = DEFAULT_DATA_DIR, oof_manifest_path: str | Path = OOF_MANIFEST_PATH
+) -> dict[str, pd.DataFrame]:
+    """Load and check every source, then build both fusion tables."""
+    frames = load_sources(data_dir, oof_manifest_path=oof_manifest_path)
+    oof_manifest = json.loads(Path(oof_manifest_path).read_text(encoding="utf-8"))
+    return {"train": build_fusion_train(frames, oof_manifest), "validation": build_fusion_val(frames)}
 
 
 def main() -> None:
