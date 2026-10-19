@@ -210,9 +210,76 @@ def test_a_subset_with_one_of_two_pinned_versions_loads_sorted_with_str_ids(tmp_
     assert loaded["loan_id"].map(type).eq(str).all()
 
 
+def _sources_with_changed_score(tmp_path: Path, name: str) -> dict:
+    """Change one valid score, keeping every ID and model version unchanged."""
+    sources = copy.deepcopy(fusion_handoff.EXPECTED_SOURCES)
+    source = sources[name]
+    original = fusion_handoff.read_score_file(fusion_handoff.REPO_ROOT / source["path"])
+    altered = original.copy()
+    column = source["probability_column"]
+    altered.loc[0, column] = 0.123 if original.loc[0, column] != 0.123 else 0.321
+    assert altered["loan_id"].equals(original["loan_id"])
+    assert altered["model_version"].equals(original["model_version"])
+    path = tmp_path / Path(source["path"]).name
+    if path.suffix == ".csv":
+        altered.to_csv(path, index=False)
+    else:
+        altered.to_parquet(path, index=False)
+    source["path"] = str(path)
+    return sources
+
+
+@pytest.mark.parametrize("name", list(fusion_handoff.EXPECTED_SOURCES))
+def test_changed_score_with_same_ids_and_version_is_refused(tmp_path: Path, name: str) -> None:
+    """Every source must match its approved checksum, not just its IDs and version label."""
+    sources = _sources_with_changed_score(tmp_path, name)
+    with pytest.raises(ValueError, match=f"{name} .*Checksum mismatch"):
+        fusion_handoff.load_sources(sources=sources)
+
+
+@pytest.mark.parametrize("line_ending", [b"\n", b"\r\n"])
+def test_tabular_csv_line_ending_conversion_preserves_the_pin(tmp_path: Path, line_ending: bytes) -> None:
+    """LF and CRLF copies of the approved CSV pass without accepting changed scores."""
+    sources = copy.deepcopy(fusion_handoff.EXPECTED_SOURCES)
+    source = sources["tabular_validation"]
+    original_path = fusion_handoff.REPO_ROOT / source["path"]
+    content = original_path.read_bytes().replace(b"\r\n", b"\n")
+    path = tmp_path / original_path.name
+    path.write_bytes(content.replace(b"\n", line_ending))
+    source["path"] = str(path)
+    frames = fusion_handoff.load_sources(sources=sources)
+    expected = fusion_handoff.read_score_file(original_path).sort_values("loan_id", ignore_index=True)
+    pd.testing.assert_frame_equal(frames["tabular_validation"], expected)
+
+
+def test_a_missing_source_checksum_is_refused() -> None:
+    sources = copy.deepcopy(fusion_handoff.EXPECTED_SOURCES)
+    sources["tfidf_train"].pop("sha256", None)
+    with pytest.raises(ValueError, match="tfidf_train .*approved sha256"):
+        fusion_handoff.load_sources(sources=sources)
+
+
+def test_changed_source_is_rejected_before_calibration_or_output_replacement(tmp_path, monkeypatch) -> None:
+    sources = _sources_with_changed_score(tmp_path, "tfidf_train")
+    outputs = {name: tmp_path / Path(path).name for name, path in fusion_handoff.OUTPUT_PATHS.items()}
+    manifest_path = tmp_path / "manifest.json"
+    paths = [*outputs.values(), manifest_path]
+    for path in paths:
+        path.write_bytes(b"previous handoff must survive")
+    before = {path: path.read_bytes() for path in paths}
+
+    def unexpected_calibration(*args, **kwargs):
+        pytest.fail("Invalid score sources reached calibration")
+
+    monkeypatch.setattr(fusion_handoff, "build_calibrated_validation", unexpected_calibration)
+    with pytest.raises(ValueError, match="tfidf_train .*Checksum mismatch"):
+        fusion_handoff.run_handoff(output_paths=outputs, manifest_path=manifest_path, sources=sources)
+    assert {path: path.read_bytes() for path in paths} == before
+
+
 def _load_with_edited_oof(tmp_path: Path, corrupt, *, re_sign: bool) -> None:
     """Load every source with an edited copy of the OOF file. ``re_sign`` writes a manifest
-    copy whose SHA-256 matches the edit, so the checks after the checksum are reached."""
+    copy and source pin matching the edit, so the checks after the checksum are reached."""
     sources = copy.deepcopy(fusion_handoff.EXPECTED_SOURCES)
     committed = pd.read_parquet(fusion_handoff.REPO_ROOT / sources["tabular_train"]["path"])
     path = tmp_path / "oof.parquet"
@@ -223,6 +290,7 @@ def _load_with_edited_oof(tmp_path: Path, corrupt, *, re_sign: bool) -> None:
     if re_sign:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["output"]["sha256"] = sha256_file(path)
+        sources["tabular_train"]["sha256"] = manifest["output"]["sha256"]
         manifest_path = tmp_path / "oof_manifest.json"
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     fusion_handoff.load_sources(sources=sources, oof_manifest_path=manifest_path)

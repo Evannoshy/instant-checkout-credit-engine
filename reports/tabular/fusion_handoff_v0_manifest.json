@@ -14,6 +14,7 @@
       "rows": 35234,
       "pinned": {
         "path": "data/tabular/tabular_oof_train_v1.parquet",
+        "sha256": "1905ed923969944b1647c8d68a0932ca469ea964d240fffdf4bbd9c577aa690c",
         "probability_column": "p_default_tabular_raw",
         "split": "train",
         "id_set": "tabular_oof",
@@ -32,6 +33,7 @@
       "rows": 21784,
       "pinned": {
         "path": "reports/tabular/raw_predictions/logistic_regression_validation.csv",
+        "sha256": "2c1a666997d156793f90c75c1cb2fe05924ca48f9ef960ece80bf7525d73f8c2",
         "probability_column": "p_default_tabular",
         "split": "validation",
         "id_set": "validation",
@@ -48,6 +50,7 @@
       "rows": 86293,
       "pinned": {
         "path": "data/nlp/tfidf_oof_train.parquet",
+        "sha256": "bd29849563f635211936c883d73dda5ce7f887ba950efa767f49b2090cd59e99",
         "probability_column": "prob_default_tfidf",
         "split": "train",
         "id_set": "train",
@@ -64,6 +67,7 @@
       "rows": 21784,
       "pinned": {
         "path": "data/nlp/tfidf_oof_validate.parquet",
+        "sha256": "f83d88312a473004a4012649727406fdedd1e00f93b80ce5245cd5587c76491b",
         "probability_column": "prob_default_tfidf",
         "split": "validation",
         "id_set": "validation",
@@ -80,6 +84,7 @@
       "rows": 86293,
       "pinned": {
         "path": "data/nlp/distilbert_scores_train.parquet",
+        "sha256": "bd3aa33d0e8cac7248a600b5c79397ec4783d7ff4b08f180467fc2cdd0dcb45e",
         "probability_column": "prob_default_distilbert",
         "split": "train",
         "id_set": "train",
@@ -97,6 +102,7 @@
       "rows": 21784,
       "pinned": {
         "path": "data/nlp/distilbert_scores_val.parquet",
+        "sha256": "b1a43c79d64a130eb356eded27c5626cacfa3ac5ac93bd05490107e65af575a9",
         "probability_column": "prob_default_distilbert",
         "split": "validation",
         "id_set": "validation",

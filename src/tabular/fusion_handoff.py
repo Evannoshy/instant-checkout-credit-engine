@@ -81,11 +81,14 @@ FUSION_VAL_COLUMNS = ("loan_id", "split", *TRACK_SCORES.values(), *TRACK_METADAT
 OUTCOME_COLUMNS = ALWAYS_PROHIBITED | {"target"}
 
 # Pinned score sources, written verbatim into the handoff manifest. Paths are
-# repository-relative. ``id_set`` names the expected loan_id set: the full
+# repository-relative. Checksums come from the reviewed source artifacts, not
+# from whichever files happen to be present when the handoff is rebuilt.
+# ``id_set`` names the expected loan_id set: the full
 # frozen split, or "tabular_oof" for the loans in the checked tabular OOF file.
 EXPECTED_SOURCES: dict[str, dict[str, Any]] = {
     "tabular_train": {
         "path": "data/tabular/tabular_oof_train_v1.parquet",
+        "sha256": "1905ed923969944b1647c8d68a0932ca469ea964d240fffdf4bbd9c577aa690c",
         "probability_column": "p_default_tabular_raw",
         "split": "train",
         "id_set": "tabular_oof",
@@ -95,6 +98,7 @@ EXPECTED_SOURCES: dict[str, dict[str, Any]] = {
     },
     "tabular_validation": {
         "path": "reports/tabular/raw_predictions/logistic_regression_validation.csv",
+        "sha256": "2c1a666997d156793f90c75c1cb2fe05924ca48f9ef960ece80bf7525d73f8c2",
         "probability_column": "p_default_tabular",
         "split": "validation",
         "id_set": "validation",
@@ -104,6 +108,7 @@ EXPECTED_SOURCES: dict[str, dict[str, Any]] = {
     },
     "tfidf_train": {
         "path": "data/nlp/tfidf_oof_train.parquet",
+        "sha256": "bd29849563f635211936c883d73dda5ce7f887ba950efa767f49b2090cd59e99",
         "probability_column": "prob_default_tfidf",
         "split": "train",
         "id_set": "train",
@@ -113,6 +118,7 @@ EXPECTED_SOURCES: dict[str, dict[str, Any]] = {
     },
     "tfidf_validation": {
         "path": "data/nlp/tfidf_oof_validate.parquet",
+        "sha256": "f83d88312a473004a4012649727406fdedd1e00f93b80ce5245cd5587c76491b",
         "probability_column": "prob_default_tfidf",
         "split": "validation",
         "id_set": "validation",
@@ -122,6 +128,7 @@ EXPECTED_SOURCES: dict[str, dict[str, Any]] = {
     },
     "distilbert_train": {
         "path": "data/nlp/distilbert_scores_train.parquet",
+        "sha256": "bd3aa33d0e8cac7248a600b5c79397ec4783d7ff4b08f180467fc2cdd0dcb45e",
         "probability_column": "prob_default_distilbert",
         "split": "train",
         "id_set": "train",
@@ -131,6 +138,7 @@ EXPECTED_SOURCES: dict[str, dict[str, Any]] = {
     },
     "distilbert_validation": {
         "path": "data/nlp/distilbert_scores_val.parquet",
+        "sha256": "b1a43c79d64a130eb356eded27c5626cacfa3ac5ac93bd05490107e65af575a9",
         "probability_column": "prob_default_distilbert",
         "split": "validation",
         "id_set": "validation",
@@ -318,6 +326,9 @@ def load_sources(
         path = REPO_ROOT / source["path"]
         is_tabular_oof = source["id_set"] == "tabular_oof"
         try:
+            if not source.get("sha256"):
+                raise ValueError("Source is missing its approved sha256")
+            provenance.verify_file_checksum(path, source["sha256"], allow_crlf=path.suffix.lower() == ".csv")
             if is_tabular_oof:
                 provenance.verify_file_checksum(path, oof_manifest["output"]["sha256"])
                 expected_ids = tabular_oof_ids(path, oof_manifest, data_dir)
@@ -522,8 +533,8 @@ def run_handoff(
     failed check leaves no partial handoff behind.
     """
     runtime = validate_runtime()
-    calibrated, calibration_details = build_calibrated_validation(data_dir)
     source_frames = load_sources(data_dir, sources)
+    calibrated, calibration_details = build_calibrated_validation(data_dir)
     oof_manifest = json.loads(OOF_MANIFEST_PATH.read_text(encoding="utf-8"))
     frames = {
         "tabular_calibrated_val": calibrated,

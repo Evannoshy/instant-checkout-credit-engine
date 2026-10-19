@@ -24,7 +24,7 @@ a fusion model.
 
 Each source was checked against pinned expectations before use: exact loan coverage, one row per
 loan, correct split label, numeric probabilities in [0, 1] with no NaN or infinity, one pinned
-model name, and only pinned model versions.
+model name, only pinned model versions, and an approved source checksum.
 
 | Source | Score column | Rows | Pinned version(s) | SHA-256 (first 12) |
 |---|---|---:|---|---|
@@ -36,6 +36,13 @@ model name, and only pinned model versions.
 | `data/nlp/distilbert_scores_val.parquet` | `prob_default_distilbert` | 21,784 | `nlp-distilbert-10k-v1` | `b1a43c79d64a` |
 
 Full checksums are in the manifest under `sources`.
+
+All six source checksums are pinned in `EXPECTED_SOURCES` and checked before
+calibration, table construction or output writes. Parquet files require exact
+byte identity. The tabular validation CSV permits only LF/CRLF line-ending
+conversion; changed scores, IDs or other content are still rejected. A missing
+checksum also stops the build. Rebuilding does not approve new source bytes by
+recording their hash. Source updates require a reviewed pin change.
 
 - **The tabular scores are the balanced v1 model**, not the unweighted LR experiment. The
   unweighted file's version (`tabular-logistic-unweighted-v1-model-fit`) is not in the pinned set
@@ -178,3 +185,23 @@ fails by design in this environment. The test requires the exact environment rec
 Every other recorded package version matches. Neither that file nor `raw_predictions.py` is
 changed by this handoff. The handoff only reads `logistic_regression_validation.csv`, and that
 file's metrics reproduce `calibration_results.csv` (§4).
+
+## 8. Checksum review follow-up (19 October 2026)
+
+Ten regression checks were added for the source pins: changed scores with the
+same IDs and model version are refused for all six sources; LF/CRLF copies of
+the approved CSV still load; a missing checksum is refused; and a rejected
+source leaves existing outputs and their manifest untouched.
+
+The new changed-score checks reproduced the gap before the fix: five sources
+were accepted despite changed scores, while the tabular OOF source was already
+protected. All 42 handoff tests pass after the fix on Windows AMD64 with Python
+3.13.15 and the pinned packages.
+
+The broader `python -m pytest src/tabular -q` run passed with 399 tests, no
+failures and 9 skips in 250.59 seconds. The skips are the eight raw-CSV checks
+and the optional full calibration rerun; neither opt-in was enabled for this run.
+
+The three committed Parquet files retain their original checksums. Only the
+approved hashes were added to the manifest's source pins; its recorded output
+hashes, writer details, model settings and calibration results are unchanged.
