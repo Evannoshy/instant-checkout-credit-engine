@@ -166,19 +166,31 @@ def build_prediction_frame(
     return frame[list(PREDICTION_COLUMNS)]
 
 
-def validate_prediction_frame(frame: pd.DataFrame, expected_loan_ids: set[str]) -> None:
+def validate_prediction_frame(
+    frame: pd.DataFrame,
+    expected_loan_ids: set[str],
+    *,
+    probability_column: str = "p_default_tabular",
+) -> None:
     """Validate a per-loan prediction table against the agreed schema.
 
     Raises ValueError, checked in this order, for: a wrong column set/order
     (checked first, since a malformed schema makes every other check
     meaningless); duplicate loan_id values; incomplete id coverage (missing
     and/or extra ids relative to expected_loan_ids, both counts reported);
-    any null p_default_tabular value; a non-numeric p_default_tabular column;
-    or any p_default_tabular value outside [0, 1].
+    any null probability value; a non-numeric probability column; or any
+    probability outside [0, 1].
+
+    ``probability_column`` replaces ``p_default_tabular`` in the expected
+    columns, so another track's score file (e.g. ``prob_default_tfidf``) is
+    checked by the same rules. The default keeps the tabular schema.
     """
-    if frame.columns.tolist() != list(PREDICTION_COLUMNS):
+    expected_columns = [
+        probability_column if column == "p_default_tabular" else column for column in PREDICTION_COLUMNS
+    ]
+    if frame.columns.tolist() != expected_columns:
         raise ValueError(
-            f"Prediction frame must have columns {list(PREDICTION_COLUMNS)} in that "
+            f"Prediction frame must have columns {expected_columns} in that "
             f"order; got {frame.columns.tolist()}"
         )
     if frame["loan_id"].duplicated().any():
@@ -193,14 +205,14 @@ def validate_prediction_frame(frame: pd.DataFrame, expected_loan_ids: set[str]) 
             f"{len(missing_ids)} missing, {len(extra_ids)} extra"
         )
 
-    if frame["p_default_tabular"].isna().any():
-        raise ValueError("Prediction frame has missing p_default_tabular values")
-    if not pd.api.types.is_numeric_dtype(frame["p_default_tabular"]):
-        raise ValueError("p_default_tabular must be numeric")
+    if frame[probability_column].isna().any():
+        raise ValueError(f"Prediction frame has missing {probability_column} values")
+    if not pd.api.types.is_numeric_dtype(frame[probability_column]):
+        raise ValueError(f"{probability_column} must be numeric")
 
-    values = frame["p_default_tabular"].to_numpy(dtype=np.float64)
+    values = frame[probability_column].to_numpy(dtype=np.float64)
     if ((values < 0) | (values > 1)).any():
-        raise ValueError("p_default_tabular values must lie within [0, 1]")
+        raise ValueError(f"{probability_column} values must lie within [0, 1]")
 
 
 def evaluate_predictions(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, Any]:

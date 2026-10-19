@@ -1,0 +1,309 @@
+{
+  "handoff_version": "fusion-handoff-v0",
+  "status": "exploratory",
+  "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+  "split_version": "split-v1",
+  "cohort": "real_text_matured_v1",
+  "feature_set_version": "tabular_features_v1",
+  "development_version": "tabular_development_v1",
+  "calibration_version": "tabular_calibration_v1",
+  "sources": {
+    "tabular_train": {
+      "path": "data/tabular/tabular_oof_train_v1.parquet",
+      "sha256": "1905ed923969944b1647c8d68a0932ca469ea964d240fffdf4bbd9c577aa690c",
+      "rows": 35234,
+      "pinned": {
+        "path": "data/tabular/tabular_oof_train_v1.parquet",
+        "sha256": "1905ed923969944b1647c8d68a0932ca469ea964d240fffdf4bbd9c577aa690c",
+        "probability_column": "p_default_tabular_raw",
+        "split": "train",
+        "id_set": "tabular_oof",
+        "model_name": "logistic_regression",
+        "allowed_versions": [
+          "tabular-logistic-v1-time-oof"
+        ],
+        "extra_columns": [
+          "fold_id"
+        ]
+      }
+    },
+    "tabular_validation": {
+      "path": "reports/tabular/raw_predictions/logistic_regression_validation.csv",
+      "sha256": "2c1a666997d156793f90c75c1cb2fe05924ca48f9ef960ece80bf7525d73f8c2",
+      "rows": 21784,
+      "pinned": {
+        "path": "reports/tabular/raw_predictions/logistic_regression_validation.csv",
+        "sha256": "2c1a666997d156793f90c75c1cb2fe05924ca48f9ef960ece80bf7525d73f8c2",
+        "probability_column": "p_default_tabular",
+        "split": "validation",
+        "id_set": "validation",
+        "model_name": "logistic_regression",
+        "allowed_versions": [
+          "tabular-logistic-v1-model-fit"
+        ],
+        "extra_columns": []
+      }
+    },
+    "tfidf_train": {
+      "path": "data/nlp/tfidf_oof_train.parquet",
+      "sha256": "bd29849563f635211936c883d73dda5ce7f887ba950efa767f49b2090cd59e99",
+      "rows": 86293,
+      "pinned": {
+        "path": "data/nlp/tfidf_oof_train.parquet",
+        "sha256": "bd29849563f635211936c883d73dda5ce7f887ba950efa767f49b2090cd59e99",
+        "probability_column": "prob_default_tfidf",
+        "split": "train",
+        "id_set": "train",
+        "model_name": "tfidf_logistic",
+        "allowed_versions": [
+          "nlp-tfidf-tuned-v1"
+        ],
+        "extra_columns": []
+      }
+    },
+    "tfidf_validation": {
+      "path": "data/nlp/tfidf_oof_validate.parquet",
+      "sha256": "f83d88312a473004a4012649727406fdedd1e00f93b80ce5245cd5587c76491b",
+      "rows": 21784,
+      "pinned": {
+        "path": "data/nlp/tfidf_oof_validate.parquet",
+        "sha256": "f83d88312a473004a4012649727406fdedd1e00f93b80ce5245cd5587c76491b",
+        "probability_column": "prob_default_tfidf",
+        "split": "validation",
+        "id_set": "validation",
+        "model_name": "tfidf_logistic",
+        "allowed_versions": [
+          "nlp-tfidf-tuned-v1"
+        ],
+        "extra_columns": []
+      }
+    },
+    "distilbert_train": {
+      "path": "data/nlp/distilbert_scores_train.parquet",
+      "sha256": "bd3aa33d0e8cac7248a600b5c79397ec4783d7ff4b08f180467fc2cdd0dcb45e",
+      "rows": 86293,
+      "pinned": {
+        "path": "data/nlp/distilbert_scores_train.parquet",
+        "sha256": "bd3aa33d0e8cac7248a600b5c79397ec4783d7ff4b08f180467fc2cdd0dcb45e",
+        "probability_column": "prob_default_distilbert",
+        "split": "train",
+        "id_set": "train",
+        "model_name": "distilbert-base-uncased",
+        "allowed_versions": [
+          "nlp-distilbert-10k-v1",
+          "nlp-distilbert-10k-holdout-v1"
+        ],
+        "extra_columns": []
+      }
+    },
+    "distilbert_validation": {
+      "path": "data/nlp/distilbert_scores_val.parquet",
+      "sha256": "b1a43c79d64a130eb356eded27c5626cacfa3ac5ac93bd05490107e65af575a9",
+      "rows": 21784,
+      "pinned": {
+        "path": "data/nlp/distilbert_scores_val.parquet",
+        "sha256": "b1a43c79d64a130eb356eded27c5626cacfa3ac5ac93bd05490107e65af575a9",
+        "probability_column": "prob_default_distilbert",
+        "split": "validation",
+        "id_set": "validation",
+        "model_name": "distilbert-base-uncased",
+        "allowed_versions": [
+          "nlp-distilbert-10k-v1"
+        ],
+        "extra_columns": []
+      }
+    }
+  },
+  "evidence_sha256": {
+    "data/tabular/tabular_oof_train_v1_manifest.json": "266a31f07998e7b8278799f3bc8192e7d25d17c7daeebe32eca885c894b196c9",
+    "reports/tabular/calibration_metrics.json": "05cdc0d23ffcf0c17b02acd13f451f48bf66306b513f14e77c8c645faf585233",
+    "reports/tabular/calibration_results.csv": "06bbf81337d88dabf30becc565e9ad753d6be21e27a45ba654a9b08b6a4e471c",
+    "configs/tabular_calibration_v1.toml": "cae057cae17fc744c7d062f95dd6aaf4930d1c81eb70bf0f161c326a19cb7380"
+  },
+  "outputs": {
+    "tabular_calibrated_val": {
+      "path": "data/tabular/tabular_calibrated_val.parquet",
+      "sha256": "ba9b60eee57c56ef2a1505df5318e849dc52fe10e7522c5e6622d9472bb89b6d",
+      "rows": 21784,
+      "columns": [
+        "loan_id",
+        "split",
+        "p_default_tabular_raw",
+        "p_default_tabular_calibrated",
+        "model_name",
+        "model_version",
+        "calibration_version"
+      ],
+      "model_version_counts": {
+        "model_version": {
+          "tabular-logistic-v1-model-fit": 21784
+        }
+      },
+      "parquet_writer": {
+        "created_by": "parquet-cpp-arrow version 23.0.1",
+        "pandas_version": "3.0.5"
+      }
+    },
+    "fusion_train_v0": {
+      "path": "data/fusion/fusion_train_v0.parquet",
+      "sha256": "33e426514c4b4c52a461094f3177bb02bbcfc4c825557c30ea212306299b0930",
+      "rows": 35234,
+      "columns": [
+        "loan_id",
+        "split",
+        "p_default_tabular_raw",
+        "prob_default_tfidf",
+        "prob_default_distilbert",
+        "tabular_fold_id",
+        "tabular_model_name",
+        "tabular_model_version",
+        "tfidf_model_name",
+        "tfidf_model_version",
+        "distilbert_model_name",
+        "distilbert_model_version"
+      ],
+      "model_version_counts": {
+        "tabular_model_version": {
+          "tabular-logistic-v1-time-oof": 35234
+        },
+        "tfidf_model_version": {
+          "nlp-tfidf-tuned-v1": 35234
+        },
+        "distilbert_model_version": {
+          "nlp-distilbert-10k-holdout-v1": 4174,
+          "nlp-distilbert-10k-v1": 31060
+        }
+      },
+      "parquet_writer": {
+        "created_by": "parquet-cpp-arrow version 23.0.1",
+        "pandas_version": "3.0.5"
+      },
+      "tabular_fold_id_counts": {
+        "0": 7022,
+        "1": 6033,
+        "2": 7095,
+        "3": 7883,
+        "4": 7201
+      }
+    },
+    "fusion_val_v0": {
+      "path": "data/fusion/fusion_val_v0.parquet",
+      "sha256": "4d4a911ab17bb2d57c0c63d36f4c25574cd719b5c5a535929d8f8e1eb4bfdc5f",
+      "rows": 21784,
+      "columns": [
+        "loan_id",
+        "split",
+        "p_default_tabular_raw",
+        "prob_default_tfidf",
+        "prob_default_distilbert",
+        "tabular_model_name",
+        "tabular_model_version",
+        "tfidf_model_name",
+        "tfidf_model_version",
+        "distilbert_model_name",
+        "distilbert_model_version"
+      ],
+      "model_version_counts": {
+        "tabular_model_version": {
+          "tabular-logistic-v1-model-fit": 21784
+        },
+        "tfidf_model_version": {
+          "nlp-tfidf-tuned-v1": 21784
+        },
+        "distilbert_model_version": {
+          "nlp-distilbert-10k-v1": 21784
+        }
+      },
+      "parquet_writer": {
+        "created_by": "parquet-cpp-arrow version 23.0.1",
+        "pandas_version": "3.0.5"
+      }
+    }
+  },
+  "calibrated_validation": {
+    "platt_mapping": {
+      "fit_on": "calibration role, balanced LR raw scores",
+      "slope": 0.9912598551922507,
+      "intercept": -1.7735760950997155
+    },
+    "validation_metrics": {
+      "balanced_lr_raw": {
+        "rows": 21784,
+        "positives": 3298,
+        "prevalence": 0.15139551964744766,
+        "mean_p": 0.48287847669864037,
+        "mean_p_minus_prevalence": 0.3314829570511927,
+        "roc_auc": 0.6659989100958312,
+        "pr_auc": 0.2575375225373021,
+        "brier_score": 0.2363088756916214,
+        "log_loss": 0.6665737985243545
+      },
+      "balanced_lr_platt": {
+        "rows": 21784,
+        "positives": 3298,
+        "prevalence": 0.15139551964744766,
+        "mean_p": 0.15103600381317703,
+        "mean_p_minus_prevalence": -0.0003595158342706295,
+        "roc_auc": 0.6659989100958312,
+        "pr_auc": 0.2575375225373021,
+        "brier_score": 0.12250249503423159,
+        "log_loss": 0.40305057453384624
+      }
+    },
+    "reproduction_tolerance": 1e-06,
+    "reproduced_against": [
+      "reports/tabular/calibration_metrics.json",
+      "reports/tabular/calibration_results.csv"
+    ]
+  },
+  "fusion_inputs": [
+    "p_default_tabular_raw",
+    "prob_default_tfidf",
+    "prob_default_distilbert"
+  ],
+  "metadata_columns": {
+    "fusion_train_v0": [
+      "loan_id",
+      "split",
+      "tabular_fold_id",
+      "tabular_model_name",
+      "tabular_model_version",
+      "tfidf_model_name",
+      "tfidf_model_version",
+      "distilbert_model_name",
+      "distilbert_model_version"
+    ],
+    "fusion_val_v0": [
+      "loan_id",
+      "split",
+      "tabular_model_name",
+      "tabular_model_version",
+      "tfidf_model_name",
+      "tfidf_model_version",
+      "distilbert_model_name",
+      "distilbert_model_version"
+    ],
+    "note": "Metadata only, not model inputs."
+  },
+  "score_semantics": "Raw base-model scores for a stacker, not credit probabilities: class weighting inflates the tabular and TF-IDF levels and DistilBERT is uncalibrated. The fusion tables carry no calibrated score; the v1 Platt mapping belongs to the model_fit model, not the fold models.",
+  "targets_included": false,
+  "test_rows_available_to_model": 0,
+  "commands": [
+    "python -m pip install -r src/tabular/requirements.txt",
+    "python -m pytest src/tabular/test_export_oof_scores.py -q",
+    "python -m src.tabular.fusion_handoff",
+    "python -m pytest src/tabular/test_fusion_handoff.py -v -s"
+  ],
+  "environment": {
+    "python": "3.13.9",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "pyarrow": "23.0.1",
+    "platform": "Windows",
+    "machine": "AMD64"
+  }
+}
