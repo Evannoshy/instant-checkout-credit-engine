@@ -14,14 +14,15 @@ from transformers import DistilBertConfig, DistilBertForSequenceClassification, 
 import src.nlp.export_distilbert_scores as export
 from src.nlp.export_distilbert_scores import (
     MANIFEST,
+    MODEL_DIR_V2,
     MODEL_VERSION,
     OUTPUT,
     check_export,
     score,
     score_borrower_text,
 )
-from src.nlp.preprocess import PREPROCESS_VERSION, build_text_payload, sha256_file
-from src.nlp.train_distilbert_prototype import SCALED
+from src.nlp.preprocess import PREPROCESS_VERSION, build_text_payload, load_original_split, sha256_file
+from src.nlp.train_distilbert_prototype import RANDOM_STATE, SCALED
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 TOKENS = ["[PAD]", "[UNK]", "[CLS]", "[SEP]", "[MASK]",
@@ -153,6 +154,20 @@ def test_v2_export_meets_the_shared_contract():
     assert not frame["loan_id"].isin(frozen_ids("test_ids.csv")).any()
     assert frame["model_version"].eq(MODEL_VERSION).all()
     assert manifest["checksums"][OUTPUT.name] == sha256_file(OUTPUT)
+
+
+def test_wrapper_reproduces_the_v2_export_on_the_trained_model():
+    """On the real model, score_borrower_text from raw fields matches the exported raw_prob for 200 validation loans."""
+    if not (OUTPUT.exists() and (MODEL_DIR_V2 / "config.json").exists()):
+        pytest.skip("Needs the trained distilbert_fusion_v2 model and its v2 export (GPU node)")
+    exported = pd.read_parquet(OUTPUT).set_index("loan_id")["raw_prob"]
+    loans = load_original_split(DATA_DIR, "validation").sample(n=200, random_state=RANDOM_STATE)
+
+    fields = loans[["title", "purpose", "desc"]].itertuples(index=False, name=None)
+    wrapper = [score_borrower_text(*row)["raw_prob"] for row in fields]
+
+    # fp16 GPU export vs this device's precision; tolerance covers that, not a preprocessing mismatch.
+    np.testing.assert_allclose(wrapper, exported[loans["loan_id"]], atol=1e-2)
 
 
 @pytest.mark.parametrize(
