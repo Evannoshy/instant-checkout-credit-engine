@@ -15,7 +15,7 @@ and write reports/nlp/distilbert_10k_metrics.json. --holdout trains the same mod
 10,000 loans distilbert_10k never saw, so the export can score every train loan without leakage.
 Stage 4 (fusion, not part of "all"): fine-tune unweighted on the base_fit loans from
 2007-06 to 2012-09 and keep the epoch with the best ROC-AUC on the base_fit loans from
-2012-10 to 2012-12, so no 2013 loan trains or selects it (personal/FUSION.md). Saves
+2012-10 to 2012-12, so no 2013 loan trains or selects it (fusion task sheet). Saves
 models/distilbert_fusion_v2/ and reports/nlp/distilbert_fusion_v2_metrics.json.
 """
 
