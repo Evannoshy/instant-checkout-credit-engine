@@ -1,7 +1,7 @@
 """DistilBERT Training Prototype.
 
 Run from the repository root:
-    python -m src.nlp.train_distilbert_prototype [--stage overfit|prototype|scaled|all] [--unweighted | --holdout]
+    python -m src.nlp.train_distilbert_prototype [--stage overfit|prototype|scaled|fusion|all] [--unweighted | --holdout]
 
 Stage 1 (overfit): train on 100 loans for 10 epochs and stop unless the loss
 reaches ~0 and the optimizer actually updates the weights.
@@ -13,6 +13,10 @@ with class-weighted loss (--unweighted for the comparison run), evaluate on 5,00
 validation loans, keep the epoch with the best ROC-AUC in models/distilbert_10k/,
 and write reports/nlp/distilbert_10k_metrics.json. --holdout trains the same model on
 10,000 loans distilbert_10k never saw, so the export can score every train loan without leakage.
+Stage 4 (fusion, not part of "all"): fine-tune unweighted on the base_fit loans from
+2007-06 to 2012-09 and keep the epoch with the best ROC-AUC on the base_fit loans from
+2012-10 to 2012-12, so no 2013 loan trains or selects it (personal/FUSION.md). Saves
+models/distilbert_fusion_v2/ and reports/nlp/distilbert_fusion_v2_metrics.json.
 """
 
 from __future__ import annotations
@@ -80,6 +84,12 @@ OVERFIT = RunConfig(train_rows=100, epochs=10, learning_rate=2e-5, lr_scheduler_
 PROTOTYPE = RunConfig(train_rows=1_000, epochs=2, learning_rate=2e-5, lr_scheduler_type="linear", logging_steps=10)
 # 10k scaling: 10x the prototype's data with the same lr and batch size, so data size (and weighting) is the only change.
 SCALED = RunConfig(train_rows=10_000, epochs=3, learning_rate=2e-5, lr_scheduler_type="linear", logging_steps=50)
+# Fusion v2: base_fit (2007-06 to 2012-12) only. The epoch is chosen on its last 3 months, never on validation.
+FUSION_NAME = "distilbert_fusion_v2"
+FUSION_TRAIN_MONTHS = ("2007-06", "2012-09")
+FUSION_SELECTION_MONTHS = ("2012-10", "2012-12")
+FUSION_POOL_ROWS = (48_307, 11_046)  # Expected loans per pool.
+FUSION = RunConfig(train_rows=FUSION_POOL_ROWS[0], epochs=3, learning_rate=2e-5, lr_scheduler_type="linear", logging_steps=100)
 
 
 def precision() -> str:
@@ -91,6 +101,8 @@ def precision() -> str:
 
 def stratified_sample(df: pd.DataFrame, n: int) -> pd.DataFrame:
     """Sample n rows keeping the default rate exact (PR-AUC depends on it)."""
+    if n == len(df):
+        return df.reset_index(drop=True)
     sample, _ = train_test_split(df, train_size=n, stratify=df["target"], random_state=RANDOM_STATE)
     return sample.reset_index(drop=True)
 
@@ -424,9 +436,38 @@ def scaled(
     )
 
 
+def fusion_pools(train_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split the train split into the fusion training and checkpoint-selection pools by issue month."""
+    pools = tuple(
+        train_df[train_df["issue_month"].between(first, last)].reset_index(drop=True)
+        for first, last in (FUSION_TRAIN_MONTHS, FUSION_SELECTION_MONTHS)
+    )
+    if tuple(map(len, pools)) != FUSION_POOL_ROWS:
+        raise ValueError(f"Fusion pools have {tuple(map(len, pools))} rows; expected {FUSION_POOL_ROWS}")
+    return pools
+
+
+def fusion(train_df: pd.DataFrame, tokenizer: DistilBertTokenizerFast) -> None:
+    """Fine-tune unweighted on base_fit loans, keep the best epoch on the later base_fit months, and write the slim report."""
+    train_pool, selection_pool = fusion_pools(train_df)
+    record = fine_tune(
+        FUSION, train_pool, selection_pool, tokenizer, len(selection_pool), MODEL_DIR.with_name(FUSION_NAME),
+        keep_best_epoch=True,
+    )
+    report = slim_report(record)
+    path = REPORT_DIR / f"{FUSION_NAME}_metrics.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    best = report["validation"]
+    print(
+        f"Best epoch {report['best_epoch']} on the selection pool: ROC-AUC {best['roc_auc']:.4f} "
+        f"[{best['roc_auc_ci_low']:.4f}, {best['roc_auc_ci_high']:.4f}]. Saved report to {path}"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--stage", choices=["overfit", "prototype", "scaled", "all"], default="all")
+    parser.add_argument("--stage", choices=["overfit", "prototype", "scaled", "fusion", "all"], default="all")
     variant = parser.add_mutually_exclusive_group()
     variant.add_argument("--unweighted", action="store_true", help="With --stage scaled: the unweighted comparison run")
     variant.add_argument("--holdout", action="store_true", help="With --stage scaled: train on loans distilbert_10k never saw")
@@ -448,6 +489,8 @@ def main() -> None:
             train_df, load_original_split(DATA_DIR, "validation"), tokenizer,
             weighted=not args.unweighted, holdout=args.holdout,
         )
+    if stage == "fusion":
+        fusion(train_df, tokenizer)
 
 
 if __name__ == "__main__":

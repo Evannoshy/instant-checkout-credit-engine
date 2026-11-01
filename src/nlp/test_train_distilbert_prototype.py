@@ -90,6 +90,12 @@ def test_scaled_uses_the_specified_configuration():
     assert proto.ROC_AUC_TARGET == 0.53
 
 
+def test_fusion_uses_the_confirmed_base_fit_months():
+    """Fusion: 48,307 train loans (2007-06..2012-09) and 11,046 selection loans (2012-10..12), all inside base_fit."""
+    assert (proto.FUSION_TRAIN_MONTHS, proto.FUSION_SELECTION_MONTHS) == (("2007-06", "2012-09"), ("2012-10", "2012-12"))
+    assert proto.FUSION_POOL_ROWS == (48_307, 11_046)
+
+
 def test_overfit_uses_the_specified_sample_and_epochs():
     """Overfit gate: 100 train loans for 10 epochs at the recommended lr 2e-5."""
     assert (proto.OVERFIT.train_rows, proto.OVERFIT.epochs, proto.OVERFIT.learning_rate) == (100, 10, 2e-5)
@@ -126,6 +132,11 @@ def test_stratified_sample_keeps_the_default_rate_exactly(loans):
     sample = proto.stratified_sample(loans, 40)
     assert len(sample) == 40
     assert sample["target"].sum() == 8
+
+
+def test_stratified_sample_of_the_whole_frame_keeps_every_row(loans):
+    """Asking for every row returns the whole frame instead of crashing in train_test_split."""
+    pd.testing.assert_frame_equal(proto.stratified_sample(loans, len(loans)), loans)
 
 
 def test_stratified_sample_is_reproducible(loans):
@@ -314,3 +325,29 @@ def test_holdout_trains_only_on_loans_the_main_model_never_saw(small_scaled, tok
     assert len(holdout_ids) == proto.SCALED.train_rows
     assert not main_ids & holdout_ids
     assert (small_scaled / "reports" / "distilbert_10k_holdout_metrics.json").exists()
+
+
+@pytest.fixture
+def monthly_loans(loans) -> pd.DataFrame:
+    """The 80 loans spread over two training months, one selection month and one 2013 month (4 defaults each)."""
+    return loans.assign(issue_month=[("2012-08", "2012-09", "2012-11", "2013-02")[i % 4] for i in range(len(loans))])
+
+
+def test_fusion_pools_reject_unexpected_counts(monthly_loans):
+    """A pool whose size differs from FUSION_POOL_ROWS stops the run instead of training on the wrong loans."""
+    with pytest.raises(ValueError, match="expected"):
+        proto.fusion_pools(monthly_loans)
+
+
+def test_fusion_trains_and_selects_only_on_base_fit_months(monkeypatch, small_scaled, tokenizer, monthly_loans):
+    """Training loans are exactly the 2007-06..2012-09 loans, selection loans exactly 2012-10..12, and no 2013 loan is used."""
+    monkeypatch.setattr(proto, "FUSION_POOL_ROWS", (40, 20))
+    monkeypatch.setattr(proto, "FUSION", dataclasses.replace(proto.FUSION, train_rows=40, learning_rate=3e-2))
+    proto.fusion(monthly_loans, tokenizer)
+
+    record = json.loads((small_scaled / "models" / proto.FUSION_NAME / "metrics.json").read_text(encoding="utf-8"))
+    ids_in = lambda *months: set(monthly_loans.loc[monthly_loans["issue_month"].isin(months), "loan_id"])
+    assert set(record["sample_loan_ids"]["train"]) == ids_in("2012-08", "2012-09")
+    assert set(record["sample_loan_ids"]["validation"]) == ids_in("2012-11")
+    assert record["config"]["class_weights"] is None  # unweighted
+    assert (small_scaled / "reports" / f"{proto.FUSION_NAME}_metrics.json").exists()
