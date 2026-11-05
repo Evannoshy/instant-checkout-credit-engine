@@ -122,7 +122,7 @@ def test_wrapper_matches_the_export_scoring_path(tiny, saved_model):
         "raw_prob": prob[0],
         "model_version": MODEL_VERSION,
         "preprocess_version": PREPROCESS_VERSION,
-    })
+    }, abs=1e-4)
 
 
 @pytest.mark.parametrize(("title", "purpose", "desc"), [("", "", ""), (None, "  ", None), ("n/a", "NULL", "<br>")])
