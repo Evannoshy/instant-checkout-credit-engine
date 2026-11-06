@@ -19,3 +19,8 @@ ipykernel==7.3.0
 scikit-learn==1.9.1
 scipy==1.18.1
 joblib==1.6.0
+
+# Needed only by src/nlp/export_scores_v2.py, which reuses the tabular track's
+# time-ordered fold builder from src/tabular/xgboost_baseline.py (that module
+# imports xgboost at module level). Same pin as src/tabular/requirements.txt.
+xgboost==3.4.1
