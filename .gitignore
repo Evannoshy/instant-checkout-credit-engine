@@ -33,6 +33,7 @@ data/external/
 !data/fixtures/**
 
 # Models, experiment stores and generated reports
+reports/tabular/expanded_lexical_validation_predictions.csv
 artifacts/**
 !artifacts/README.md
 models/
