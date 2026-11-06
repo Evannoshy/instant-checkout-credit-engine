@@ -1,0 +1,28 @@
+{
+  "device": "NVIDIA TITAN RTX",
+  "precision": "fp16",
+  "torch_threads": 2,
+  "versions": {
+    "python": "3.12.3",
+    "torch": "2.9.0+cu128",
+    "transformers": "5.17.0"
+  },
+  "model": {
+    "source": "models/distilbert_fusion_v2",
+    "revision": null
+  },
+  "load_seconds": 0.4695239488501102,
+  "single_loan_ms": {
+    "loans": 200,
+    "warmup_calls": 10,
+    "p50": 5.9839385794475675,
+    "p95": 6.693173502571881,
+    "mean": 6.473627061350271
+  },
+  "batch": {
+    "loans": 2000,
+    "batch_size": 128,
+    "seconds": 0.7401318100746721,
+    "loans_per_second": 2702.2213783761295
+  }
+}
