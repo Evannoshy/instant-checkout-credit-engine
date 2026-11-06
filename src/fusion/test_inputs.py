@@ -9,6 +9,7 @@ role mapping, raw tabular prediction files and split manifest.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -72,6 +73,8 @@ def test_committed_config_runs_only_the_tabular_variant_and_is_unweighted():
     (('input_space = "probability"', 'input_space = "logit"'), "bad_setting"),
     (('method = "platt"', 'method = "isotonic"'), "bad_setting"),
     (('variants = ["tabular_only"]', 'variants = ["missing"]'), "unknown_variant"),
+    (('variants = ["tabular_only"]', "variants = []"), "empty_run"),
+    (('tabular_only = ["tabular"]', "tabular_only = []"), "empty_variant"),
 ])
 def test_config_rejects_unapproved_settings(tmp_path, edit, key):
     with pytest.raises(ValueError, match=_message(key)):
@@ -153,6 +156,31 @@ def test_real_reference_aligns_with_validation_rows(real_tables):
     assert reference["loan_id"].tolist() == validation["loan_id"].tolist()
     # The reference's raw score is the same balanced v1 LR score the stacker reads.
     np.testing.assert_allclose(reference["p_reference_raw"], validation["p_default_tabular"], atol=1e-12)
+
+
+def test_reference_raw_scores_that_disagree_with_the_tabular_input_are_refused(real_tables):
+    config, tables = real_tables
+    reference = inputs.load_reference(config, tables["validation"]["loan_id"])
+    inputs.check_reference_matches_tabular(reference, tables["validation"])
+    shifted = reference.assign(p_reference_raw=np.roll(reference["p_reference_raw"].to_numpy(), 1))
+    with pytest.raises(ValueError, match=_message("reference_raw_mismatch")):
+        inputs.check_reference_matches_tabular(shifted, tables["validation"])
+
+
+@pytest.mark.parametrize("change, key", [
+    (lambda f: f.assign(split="train"), "reference_split"),
+    (lambda f: f.assign(p_default_tabular_calibrated=np.nan), "reference_values"),
+    (lambda f: f.assign(p_default_tabular_raw=1.5), "reference_values"),
+])
+def test_reference_with_bad_values_is_refused(tmp_path, real_tables, change, key):
+    config, tables = real_tables
+    source = REPOSITORY_ROOT / config["reference"]["path"]
+    target = tmp_path / config["reference"]["path"]
+    target.parent.mkdir(parents=True)
+    change(pd.read_parquet(source)).to_parquet(target, index=False)
+    edited = {**config, "reference": {**config["reference"], "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}}
+    with pytest.raises(ValueError, match=_message(key)):
+        inputs.load_reference(edited, tables["validation"]["loan_id"], root=tmp_path)
 
 
 def test_tampered_role_mapping_is_refused(tmp_path):

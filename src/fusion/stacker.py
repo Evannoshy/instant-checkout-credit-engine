@@ -271,7 +271,10 @@ def run_stacker(
     variants = {name: config["variants"][name] for name in config["run"]["variants"]}
     tracks = sorted({track for variant_tracks in variants.values() for track in variant_tracks})
     tables = inputs.build_role_tables(config, tracks, data_dir=data_dir)
-    reference = inputs.load_reference(config, tables["validation"]["loan_id"])["p_reference"].to_numpy()
+    reference_frame = inputs.load_reference(config, tables["validation"]["loan_id"])
+    if "tabular" in tracks:
+        inputs.check_reference_matches_tabular(reference_frame, tables["validation"])
+    reference = reference_frame["p_reference"].to_numpy()
 
     fitted = [fit_variant(name, variant_tracks, tables, config) for name, variant_tracks in variants.items()]
     versions = validation_versions(reference, fitted)

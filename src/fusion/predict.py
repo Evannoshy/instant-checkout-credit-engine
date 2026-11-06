@@ -18,6 +18,11 @@ balanced v1 LR, pinned by SHA-256 in the stacker config).
 A missing, non-finite or out-of-range score raises ValueError. No score is
 ever filled, and no text-model probability is invented.
 
+``scores["tabular"]`` must be the RAW balanced v1 LR probability
+(``tabular-logistic-v1-model-fit``), never the already-calibrated tabular PD:
+both the stacker and the fallback calibrate it, and nothing here can tell the
+two apart.
+
 Inputs are base-model probabilities, not borrower fields: the saved tabular
 pipeline (Brandon) and the text scorer (Vincent's ``score_borrower_text``)
 produce them upstream.
@@ -61,6 +66,7 @@ ERROR_MESSAGES: dict[str, str] = {
         "Text marked unusable but {tracks} scores were given; no text-model probability is used then"
     ),
     "artifact_mismatch": "Artifact {path} is for {actual!r}, not {expected!r}",
+    "artifact_field": "Artifact {path} {field} is {actual!r}; expected {expected!r}",
 }
 
 
@@ -103,6 +109,40 @@ def _reference_platt(config: dict[str, Any], root: Path) -> PlattMapping:
     return PlattMapping(params["slope"], params["intercept"], metrics["settings"]["probability_clip"])
 
 
+def _check_artifact(artifact: dict[str, Any], config: dict[str, Any], variant: str, path: Path) -> None:
+    """Require the artifact to match the config's tracks, versions and approved fitting settings."""
+    tracks = config["variants"][variant]
+    expected = {
+        "tracks": tracks,
+        "input_columns": inputs.score_columns(tracks),
+        "input_space": config["stacker"]["input_space"],
+        "coefficient count": len(tracks),
+        "stacker class_weight": None,
+        "stacker fit_role": "fusion_fit",
+        "calibrator method": "platt",
+        "calibrator fit_role": "fusion_calibration",
+        "source_versions": {
+            track: config["sources"].get(track, {}).get("model_version") for track in tracks
+        },
+    }
+    actual = {
+        "tracks": artifact["tracks"],
+        "input_columns": artifact["input_columns"],
+        "input_space": artifact["input_space"],
+        "coefficient count": len(artifact["stacker"]["coefficients"]),
+        "stacker class_weight": artifact["stacker"]["class_weight"],
+        "stacker fit_role": artifact["stacker"]["fit_role"],
+        "calibrator method": artifact["calibrator"]["method"],
+        "calibrator fit_role": artifact["calibrator"]["fit_role"],
+        "source_versions": artifact["source_versions"],
+    }
+    for field, value in expected.items():
+        if actual[field] != value:
+            raise ValueError(ERROR_MESSAGES["artifact_field"].format(
+                path=path, field=field, actual=actual[field], expected=value,
+            ))
+
+
 def load_predictor(
     variant: str = "tabular_only",
     *,
@@ -119,6 +159,7 @@ def load_predictor(
             path=path, actual=(artifact["variant"], artifact["stacker_version"]),
             expected=(variant, config["stacker_version"]),
         ))
+    _check_artifact(artifact, config, variant, path)
     calibrator = artifact["calibrator"]
     return FusionPredictor(
         stacker_version=artifact["stacker_version"],

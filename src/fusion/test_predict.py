@@ -7,6 +7,7 @@ From the repository root:
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from pathlib import Path
@@ -119,6 +120,23 @@ def test_fallback_reproduces_the_approved_calibrated_tabular_reference(tabular_o
         for p in reference["p_default_tabular_raw"]
     ]
     np.testing.assert_allclose(rebuilt, reference["p_default_tabular_calibrated"], rtol=0, atol=1e-12)
+
+
+@pytest.mark.parametrize("edit", [
+    lambda a: a["stacker"].update(class_weight="balanced"),
+    lambda a: a["stacker"].update(fit_role="validation"),
+    lambda a: a["calibrator"].update(fit_role="fusion_fit"),
+    lambda a: a["stacker"].update(coefficients=[1.0, 2.0]),
+    lambda a: a.update(input_columns=["p_default_tfidf"]),
+    lambda a: a["source_versions"].update(tabular="tabular-logistic-unweighted-v1-model-fit"),
+])
+def test_artifact_that_disagrees_with_the_config_is_refused(tmp_path, edit):
+    source = REPOSITORY_ROOT / "data" / "fusion" / "stacker_v1" / "tabular_only.json"
+    artifact = json.loads(source.read_text(encoding="utf-8"))
+    edit(artifact)
+    (tmp_path / "tabular_only.json").write_text(json.dumps(artifact), encoding="utf-8")
+    with pytest.raises(ValueError, match=_message("artifact_field")):
+        predict.load_predictor("tabular_only", artifact_dir=tmp_path)
 
 
 def test_artifact_for_another_variant_is_refused(tmp_path):

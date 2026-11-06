@@ -77,7 +77,15 @@ ERROR_MESSAGES: dict[str, str] = {
     "label_missing": "{count} {role} loans have no label in the manifest",
     "reference_ids": "Reference rows are not exactly the validation loans",
     "reference_version": "Reference must be {expected!r}; got {actual}",
+    "reference_split": "Reference must contain only split 'validation'",
+    "reference_values": "Reference {column} must be finite and within [0, 1] on every row",
+    "reference_raw_mismatch": "Reference raw scores differ from the tabular source on {count} validation loans",
+    "empty_run": "[run] variants must name at least one variant",
+    "empty_variant": "Variant {variant!r} must list at least one track",
 }
+
+# The reference's raw column must equal the stacker's tabular input to this tolerance.
+REFERENCE_RAW_TOLERANCE = 1e-12
 
 
 def _require(condition: bool, key: str, requirement: str, value: Any) -> None:
@@ -115,11 +123,15 @@ def load_stacker_config(path: str | Path = DEFAULT_STACKER_CONFIG) -> dict[str, 
             raise ValueError(ERROR_MESSAGES["unknown_format"].format(
                 track=track, known=list(SOURCE_FORMATS), value=source.get("format"),
             ))
+    if not config["run"].get("variants"):
+        raise ValueError(ERROR_MESSAGES["empty_run"])
     for variant in config["run"]["variants"]:
         if variant not in config["variants"]:
             raise ValueError(ERROR_MESSAGES["unknown_variant"].format(
                 variant=variant, known=sorted(config["variants"]),
             ))
+        if not config["variants"][variant]:
+            raise ValueError(ERROR_MESSAGES["empty_variant"].format(variant=variant))
         for track in config["variants"][variant]:
             if track not in config["sources"]:
                 raise ValueError(ERROR_MESSAGES["track_without_source"].format(variant=variant, track=track))
@@ -262,10 +274,22 @@ def build_role_tables(
     return tables
 
 
+def check_reference_matches_tabular(reference: pd.DataFrame, validation: pd.DataFrame) -> None:
+    """Require the reference's raw score to equal the stacker's tabular input, row for row.
+
+    Catches a stale reference file or a row misalignment between the two.
+    """
+    difference = np.abs(reference["p_reference_raw"].to_numpy() - validation[score_column("tabular")].to_numpy())
+    if count := int((difference > REFERENCE_RAW_TOLERANCE).sum()):
+        raise ValueError(ERROR_MESSAGES["reference_raw_mismatch"].format(count=count))
+
+
 def load_reference(config: dict[str, Any], validation_ids: pd.Series, root: Path = REPO_ROOT) -> pd.DataFrame:
     """The calibrated tabular reference for validation: ``loan_id, p_reference, p_reference_raw``.
 
     Rows are returned in ``validation_ids`` order so they align with the stacker's.
+    Raises ValueError for a wrong version, split, ID set, or a non-finite or
+    out-of-range probability.
     """
     reference = config["reference"]
     path = root / reference["path"]
@@ -275,8 +299,14 @@ def load_reference(config: dict[str, Any], validation_ids: pd.Series, root: Path
         raise ValueError(ERROR_MESSAGES["reference_version"].format(
             expected=reference["model_version"], actual=versions,
         ))
+    if not frame["split"].eq("validation").all():
+        raise ValueError(ERROR_MESSAGES["reference_split"])
     if frame["loan_id"].duplicated().any() or set(frame["loan_id"]) != set(validation_ids):
         raise ValueError(ERROR_MESSAGES["reference_ids"])
+    for column in (reference["probability_column"], reference["raw_probability_column"]):
+        values = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype=np.float64)
+        if not (np.isfinite(values) & (values >= 0) & (values <= 1)).all():
+            raise ValueError(ERROR_MESSAGES["reference_values"].format(column=column))
     aligned = frame.set_index("loan_id").loc[list(validation_ids)]
     return pd.DataFrame({
         "loan_id": list(validation_ids),
