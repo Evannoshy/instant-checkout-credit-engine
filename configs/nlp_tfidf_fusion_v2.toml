@@ -1,0 +1,60 @@
+model_version = "nlp-tfidf-fusion-v2"
+model_name = "tfidf_logistic"
+preprocess_version = "nlp-preprocess-v1"
+feature_set = "text_payload_labels_stripped"
+status = "proposed"
+
+# The shared loan_id -> role mapping is the cross-track contract. fusion_roles.py
+# states that other tracks read the CSV and do not import that module, so the
+# path and checksum are pinned here and verified at run time.
+[roles]
+mapping_path = "data/fusion/fusion_roles_v1.csv"
+mapping_sha256 = "68599e30673a8099feadd3c7961f70dcc72bf082266d4a891c2e48f54664b20e"
+fusion_development_version = "fusion_development_v1"
+fit_role = "base_fit"
+scoring_roles = ["fusion_fit", "fusion_calibration", "validation"]
+
+[expected.role_rows]
+base_fit = 59353
+fusion_fit = 15587
+fusion_calibration = 11353
+validation = 21784
+scoring_total = 48724
+
+# class_weight is None for the shipped model: the fusion task sheet asks for an
+# unweighted probability, and reports/nlp/baseline_tfidf_interpretability.md
+# (NI-01) measured balanced weighting as costing calibration for no ranking gain.
+# An unweighted probability is NOT post-hoc calibrated and is not labelled as such.
+[model]
+class_weight = "none"
+max_iter = 1000
+random_state = 42
+sublinear_tf = true
+
+[grid]
+max_features = [3000, 5000, 10000]
+ngram_range = [[1, 1], [1, 2]]
+C = [0.01, 0.1, 1.0, 10.0]
+
+# Expanding-window folds over base_fit issue months, reusing the scheme and
+# settings already used by the tabular track (configs/tabular_xgboost_v1.toml
+# [cv]) so both tracks select settings under comparable time-ordered folds.
+[cv]
+n_folds = 5
+min_train_share = 0.4
+scoring = "average_precision"
+scheme = "expanding_window_time_ordered"
+scheme_source = "src.tabular.xgboost_baseline.time_aware_folds"
+
+# Refitted under matched conditions (same base_fit rows, same folds) so the
+# comparison is like for like. The v1 balanced numbers used all 86,293 train
+# rows and random folds and are NOT comparable.
+[comparison]
+class_weight = "balanced"
+
+[output]
+scores_path = "data/nlp/tfidf_scores_v2.parquet"
+manifest_path = "reports/nlp/tfidf_scores_v2_manifest.json"
+# Gitignored by *.joblib: the manifest carries everything needed to rebuild the
+# pipeline deterministically, so the artefact is a convenience, not the contract.
+pipeline_path = "artifacts/nlp/tfidf_fusion_v2_pipeline.joblib"

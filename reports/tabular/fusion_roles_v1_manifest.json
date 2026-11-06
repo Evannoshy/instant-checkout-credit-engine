@@ -1,0 +1,76 @@
+{
+  "fusion_development_version": "fusion_development_v1",
+  "status": "approved",
+  "approved_by": [
+    "Evan",
+    "Ariel"
+  ],
+  "approved_on": "2026-10-28",
+  "approval_ref": null,
+  "cohort_version": "real_text_matured_v1",
+  "split_version": "split-v1",
+  "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+  "tabular_development_version": "tabular_development_v1",
+  "output": {
+    "path": "data/fusion/fusion_roles_v1.csv",
+    "sha256": "68599e30673a8099feadd3c7961f70dcc72bf082266d4a891c2e48f54664b20e",
+    "rows": 108077,
+    "columns": [
+      "loan_id",
+      "split",
+      "role",
+      "issue_month"
+    ]
+  },
+  "roles": {
+    "base_fit": {
+      "split": "train",
+      "rows": 59353,
+      "first_month": "2007-06",
+      "last_month": "2012-12"
+    },
+    "fusion_fit": {
+      "split": "train",
+      "rows": 15587,
+      "first_month": "2013-01",
+      "last_month": "2013-04"
+    },
+    "fusion_calibration": {
+      "split": "train",
+      "rows": 11353,
+      "first_month": "2013-05",
+      "last_month": "2013-07"
+    },
+    "validation": {
+      "split": "validation",
+      "rows": 21784,
+      "first_month": "2013-08",
+      "last_month": "2013-12"
+    }
+  },
+  "nlp_scoring_roles": [
+    "fusion_fit",
+    "fusion_calibration",
+    "validation"
+  ],
+  "nlp_scoring_rows": 48724,
+  "locked_test_rows": 14922,
+  "test_rows_in_mapping": 0,
+  "targets_included": false,
+  "inputs_sha256": {
+    "data/split_manifest.csv": "35e3545ee7a8a1221e1936ec22a4ef7951deea0936cc6b645035da2c4486a01f",
+    "data/split_statistics.json": "0f2ab221cfc16219ec1fb2c9b195a22281cca1aab86913d6853d1ac03d6e09ba",
+    "configs/cohort_v1.toml": "7adc44253ecc6c65e3a6ac27df46bfb73af9006df149fe992c2ff41e41e2abfc",
+    "configs/fusion_development_v1.toml": "7632ab534027f8acbbb7444d22d2c55fdcaf0bc751c5d3fbc85cabc79021a12d"
+  },
+  "commands": [
+    "python -m src.tabular.fusion_roles",
+    "python -m pytest src/tabular/test_fusion_roles.py -v -s"
+  ],
+  "environment": {
+    "python": "3.13.9",
+    "pandas": "3.0.5",
+    "platform": "Windows",
+    "machine": "AMD64"
+  }
+}
