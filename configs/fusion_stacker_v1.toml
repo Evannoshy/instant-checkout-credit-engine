@@ -1,0 +1,84 @@
+stacker_version = "fusion-stacker-v1"
+status = "development"
+fusion_development_version = "fusion_development_v1"
+
+# Brandon's shared loan ID -> role mapping (PR #26). Pinned so a regenerated mapping is refused.
+[role_mapping]
+path = "data/fusion/fusion_roles_v1.csv"
+sha256 = "68599e30673a8099feadd3c7961f70dcc72bf082266d4a891c2e48f54664b20e"
+
+# Stacker inputs. Each track yields one raw probability per loan for every
+# fusion_fit, fusion_calibration and validation loan (48,724). A missing,
+# duplicate, non-finite or out-of-range score stops the run; nothing is filled.
+#
+# format = "tabular_raw_predictions": the balanced v1 LR fitted on model_fit
+#   (= base_fit) only. Its calibration file covers fusion_fit + fusion_calibration.
+# format = "nlp_scores_v2": the shared six-column export
+#   (loan_id, split, role, raw_margin, raw_prob, model_version).
+#
+# CSV checksums accept LF/CRLF conversion only (provenance.verify_file_checksum).
+[sources.tabular]
+format = "tabular_raw_predictions"
+model_name = "logistic_regression"
+model_version = "tabular-logistic-v1-model-fit"
+probability_column = "p_default_tabular"
+fusion_path = "reports/tabular/raw_predictions/logistic_regression_calibration.csv"
+fusion_sha256 = "d16f15f0b6dbd27ed93dba4f96fb19631b5a22cabb4acdfe13fb8ef95835a532"
+validation_path = "reports/tabular/raw_predictions/logistic_regression_validation.csv"
+validation_sha256 = "84d845fcabd097aead2f70f0ca017c324d7abfa6db0a313fe8c851586759fbc9"
+
+# Pending (Yati): add when data/nlp/tfidf_scores_v2.parquet is published.
+# [sources.tfidf]
+# format = "nlp_scores_v2"
+# path = "data/nlp/tfidf_scores_v2.parquet"
+# sha256 = "<from Yati's manifest>"
+# model_version = "<new unweighted version>"
+
+# Pending (Vincent, PR #25): add when data/nlp/distilbert_scores_v2.parquet is merged.
+# [sources.distilbert]
+
+# The existing calibrated tabular reference: benchmark and fallback only, never a stacker input.
+# Its Platt mapping (tabular_calibration_v1) was fitted on all 26,940 Jan-Jul 2013 loans, which
+# include the 15,587 fusion_fit loans. That is fine for scoring validation, but it is not a
+# held-out comparison on the fusion rows.
+[reference]
+path = "data/tabular/tabular_calibrated_val.parquet"
+sha256 = "ba9b60eee57c56ef2a1505df5318e849dc52fe10e7522c5e6622d9472bb89b6d"
+probability_column = "p_default_tabular_calibrated"
+raw_probability_column = "p_default_tabular_raw"
+model_version = "tabular-logistic-v1-model-fit"
+calibration_version = "tabular_calibration_v1"
+calibration_metrics_path = "reports/tabular/calibration_metrics.json"
+calibration_metrics_sha256 = "ebaa1cf534aa290120cb6996cccb6b1a6f8ba7ca904497c5a30c01a7e9a3b707"
+
+# Each variant lists the tracks it stacks. Only `run` variants are fitted; a run variant whose
+# track has no [sources] entry stops the run rather than being skipped.
+[variants]
+tabular_only = ["tabular"]
+tabular_tfidf = ["tabular", "tfidf"]
+tabular_tfidf_distilbert = ["tabular", "tfidf", "distilbert"]
+
+[run]
+variants = ["tabular_only"]
+
+# Regularised logistic regression on raw probabilities, unweighted (class_weight = None).
+[stacker]
+C = 1.0
+class_weight = "none"
+max_iter = 1000
+input_space = "probability"
+
+# Final calibrator, fitted on fusion_calibration stacker outputs only.
+[calibration]
+method = "platt"
+probability_clip = 1e-6
+plot_bins = 10
+plot_strategy = "quantile"
+
+# Paired bootstrap of validation differences. The margin is a PROPOSED practical target only:
+# Evan and Ariel have not yet confirmed the primary metric or the decision rule.
+[evaluation]
+bootstrap_resamples = 1000
+seed = 42
+proposed_margin = 0.005
+decision_rule_status = "pending lead confirmation"
