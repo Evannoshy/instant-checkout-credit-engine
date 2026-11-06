@@ -44,6 +44,8 @@ MODEL_DIR_V2 = MODEL_DIR.with_name(FUSION_NAME)
 MODEL_VERSION = "nlp-distilbert-fusion-v2"
 OUTPUT = DATA_DIR / "nlp" / "distilbert_scores_v2.parquet"
 MANIFEST = REPORT_DIR / "distilbert_scores_v2_manifest.json"
+ROLE_MAPPING = DATA_DIR / "fusion" / "fusion_roles_v1.csv"
+ROLE_MAPPING_SHA256 = "68599e30673a8099feadd3c7961f70dcc72bf082266d4a891c2e48f54664b20e"
 COLUMNS = ["loan_id", "split", "role", "raw_margin", "raw_prob", "model_version"]
 ROLE_MONTHS = {
     "fusion_fit": ("2013-01", "2013-04"),
@@ -98,8 +100,9 @@ def score_borrower_text(
 ) -> dict[str, Any]:
     """Score one borrower with the export's preprocessing and model; no score when the text is unusable.
 
-    text_usable: the cleaned title + purpose + description payload is non-empty (the confirmed definition).
+    text_usable: the cleaned title + purpose + description payload is non-empty.
     desc_usable: the description has at least one word, the rule behind desc_distress density 0.0.
+    The demo's missing-text policy still needs agreement between the track leads.
     """
     payload = build_text_payload({"title": title, "purpose": purpose, "desc": desc})
     result = {
@@ -125,6 +128,13 @@ def development_rows() -> pd.DataFrame:
     return rows[rows["role"].notna()].reset_index(drop=True)
 
 
+def load_role_mapping(path: Path = ROLE_MAPPING) -> pd.DataFrame:
+    """Read the published role mapping only if its pinned checksum matches."""
+    if sha256_file(path) != ROLE_MAPPING_SHA256:
+        raise ValueError("Shared role mapping checksum mismatch; review the contract before rescoring")
+    return pd.read_csv(path, dtype="string")
+
+
 def check_export(frame: pd.DataFrame, model_ids: set[str]) -> None:
     """Raise unless frame meets the shared six-column contract and scores no loan the model trained or selected on."""
     if frame.columns.tolist() != COLUMNS:
@@ -134,12 +144,22 @@ def check_export(frame: pd.DataFrame, model_ids: set[str]) -> None:
         f"role counts {counts} differ from {ROLE_ROWS}": counts != ROLE_ROWS,
         "split does not match role": not frame["split"].eq(frame["role"].map(ROLE_SPLIT)).all(),
         "duplicate loan_id": frame["loan_id"].duplicated().any(),
+        "missing loan_id": frame["loan_id"].isna().any(),
+        "wrong model_version": not frame["model_version"].eq(MODEL_VERSION).fillna(False).all(),
         "non-finite score": not np.isfinite(frame[["raw_margin", "raw_prob"]].to_numpy(dtype=float)).all(),
         "raw_prob outside [0, 1]": not frame["raw_prob"].between(0, 1).all(),
         "scores a loan the model trained or selected on": frame["loan_id"].isin(model_ids).any(),
     }
     if failures := [message for message, failed in checks.items() if failed]:
         raise ValueError("Export check failed: " + "; ".join(failures))
+    expected = load_role_mapping()
+    expected = expected.loc[expected["role"].isin(ROLE_ROWS), ["loan_id", "split", "role"]]
+    if set(frame["loan_id"]) != set(expected["loan_id"]):
+        raise ValueError("Export loan IDs differ from the shared role mapping")
+    expected = expected.set_index("loan_id").loc[frame["loan_id"]]
+    for column in ("split", "role"):
+        if not np.array_equal(frame[column].to_numpy(), expected[column].to_numpy()):
+            raise ValueError(f"Export {column} disagrees with the shared role mapping for a loan_id")
 
 
 def id_set(ids: Sequence[str], months: tuple[str, str]) -> dict[str, Any]:
@@ -200,6 +220,7 @@ def main() -> None:
             **{f"{args.model_dir.name}/{p.name}": sha256_file(p) for p in sorted(args.model_dir.iterdir()) if p.is_file()},
             OUTPUT.name: sha256_file(OUTPUT),
             "split_manifest.csv": sha256_file(DATA_DIR / "split_manifest.csv"),
+            "fusion_roles_v1.csv": sha256_file(ROLE_MAPPING),
         },
     }
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)

@@ -76,7 +76,7 @@ def test_score_returns_rows_in_input_order_despite_length_sorting(tiny):
 def export_frame(monkeypatch) -> pd.DataFrame:
     """A four-loan export that passes every check once ROLE_ROWS is scaled down to match it."""
     monkeypatch.setattr(export, "ROLE_ROWS", {"fusion_fit": 2, "fusion_calibration": 1, "validation": 1})
-    return pd.DataFrame({
+    frame = pd.DataFrame({
         "loan_id": ["a", "b", "c", "d"],
         "split": ["train", "train", "train", "validation"],
         "role": ["fusion_fit", "fusion_fit", "fusion_calibration", "validation"],
@@ -84,11 +84,34 @@ def export_frame(monkeypatch) -> pd.DataFrame:
         "raw_prob": [0.5, 0.73, 0.27, 0.88],
         "model_version": MODEL_VERSION,
     })
+    mapping = frame[["loan_id", "split", "role"]].copy()
+    monkeypatch.setattr(export, "load_role_mapping", lambda: mapping.copy())
+    return frame
 
 
 def test_check_export_accepts_a_valid_frame(export_frame):
     """A frame meeting the shared contract passes."""
     check_export(export_frame, {"z"})
+
+
+def test_check_export_accepts_reordered_rows(export_frame):
+    """Alignment is checked by loan ID, not by incidental row order."""
+    check_export(export_frame.iloc[::-1].reset_index(drop=True), set())
+
+
+def test_role_mapping_matches_the_published_contract():
+    """The committed mapping has the pinned checksum and all expected roles."""
+    mapping = export.load_role_mapping()
+    assert mapping["loan_id"].notna().all() and mapping["loan_id"].is_unique
+    assert mapping["role"].value_counts().to_dict() == {"base_fit": 59_353, **export.ROLE_ROWS}
+
+
+def test_role_mapping_rejects_a_changed_file(tmp_path):
+    """Changing the role mapping stops validation before a different population can be scored."""
+    path = tmp_path / "roles.csv"
+    path.write_text("loan_id,split,role,issue_month\na,train,fusion_fit,2013-01\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        export.load_role_mapping(path)
 
 
 @pytest.mark.parametrize(
@@ -102,6 +125,13 @@ def test_check_export_accepts_a_valid_frame(export_frame):
         pytest.param(lambda f: f.assign(split=["validation", "train", "train", "validation"]), set(), id="wrong-split"),
         pytest.param(lambda f: f.drop(columns="model_version"), set(), id="dropped-column"),
         pytest.param(lambda f: f, {"b"}, id="model-saw-loan"),
+        pytest.param(lambda f: f.assign(loan_id=["unknown", "b", "c", "d"]), set(), id="unknown-id"),
+        pytest.param(lambda f: f.assign(loan_id=[None, "b", "c", "d"]), set(), id="missing-id"),
+        pytest.param(lambda f: f.assign(role=["fusion_calibration", "fusion_fit", "fusion_fit", "validation"]),
+                     set(), id="swapped-roles-same-counts"),
+        pytest.param(lambda f: f.assign(model_version="another-model"), set(), id="wrong-version"),
+        pytest.param(lambda f: f.assign(model_version=[None, MODEL_VERSION, MODEL_VERSION, MODEL_VERSION]),
+                     set(), id="missing-version"),
     ],
 )
 def test_check_export_rejects_a_broken_frame(export_frame, broken, model_ids):
@@ -166,8 +196,8 @@ def test_wrapper_reproduces_the_v2_export_on_the_trained_model():
     fields = loans[["title", "purpose", "desc"]].itertuples(index=False, name=None)
     wrapper = [score_borrower_text(*row)["raw_prob"] for row in fields]
 
-    # fp16 GPU export vs this device's precision; tolerance covers that, not a preprocessing mismatch.
-    np.testing.assert_allclose(wrapper, exported[loans["loan_id"]], atol=1e-2)
+    # Match the documented absolute tolerance for fp16 export versus wrapper inference.
+    np.testing.assert_allclose(wrapper, exported[loans["loan_id"]], atol=1e-4, rtol=0)
 
 
 @pytest.mark.parametrize(
