@@ -1,0 +1,40 @@
+fusion_development_version = "fusion_development_v1"
+status = "approved"
+approved_by = ["Evan", "Ariel"]
+approved_on = "2026-10-28"
+cohort_version = "real_text_matured_v1"
+split_version = "split-v1"
+# base_fit must equal this config's model_fit; fusion_fit + fusion_calibration its calibration.
+tabular_development_version = "tabular_development_v1"
+
+# Months are inclusive "YYYY-MM" issue months, matched against split_manifest.csv issue_month.
+# Each role lives inside one split-v1 split; split labels are never changed.
+[roles.base_fit]
+split = "train"
+first_month = "2007-06"
+last_month = "2012-12"
+
+[roles.fusion_fit]
+split = "train"
+first_month = "2013-01"
+last_month = "2013-04"
+
+[roles.fusion_calibration]
+split = "train"
+first_month = "2013-05"
+last_month = "2013-07"
+
+[roles.validation]
+split = "validation"
+first_month = "2013-08"
+last_month = "2013-12"
+
+[expected]
+nlp_scoring_rows = 48724      # fusion_fit + fusion_calibration + validation
+locked_test_rows = 14922      # audit count only; test IDs are not in the mapping
+
+[expected.role_rows]
+base_fit = 59353
+fusion_fit = 15587
+fusion_calibration = 11353
+validation = 21784
