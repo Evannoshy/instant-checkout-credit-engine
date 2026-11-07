@@ -57,6 +57,8 @@ DEFAULT_ARTIFACT_DIR = REPO_ROOT / "data" / "fusion" / "stacker_v1"
 METRICS = calibrate.METRICS
 REFERENCE = "reference"
 BASELINE_VARIANT = "tabular_only"
+# (candidate, baseline) variants compared when both run: does DistilBERT add over TF-IDF?
+INCREMENTAL_PAIRS = (("tabular_tfidf_distilbert", "tabular_tfidf"),)
 
 
 @dataclass(frozen=True)
@@ -115,12 +117,14 @@ def validation_versions(reference: np.ndarray, fitted: list[FittedVariant]) -> d
 
 def comparison_pairs(versions: dict[str, np.ndarray]) -> list[tuple[str, str]]:
     """(candidate, baseline) pairs: every stacker output vs the reference, and each text variant's
-    calibrated output vs the calibrated tabular-only stacker (the "does text help" question)."""
+    calibrated output vs the calibrated tabular-only stacker (the "does text help" question), and
+    each INCREMENTAL_PAIRS candidate vs its smaller variant, calibrated."""
     pairs = [(name, REFERENCE) for name in versions if name != REFERENCE]
     baseline = f"{BASELINE_VARIANT}_platt"
     if baseline in versions:
         pairs += [(name, baseline) for name in versions if name.endswith("_platt") and name != baseline]
-    return pairs
+    incremental = [(f"{candidate}_platt", f"{smaller}_platt") for candidate, smaller in INCREMENTAL_PAIRS]
+    return pairs + [pair for pair in incremental if set(pair) <= set(versions)]
 
 
 def compare(

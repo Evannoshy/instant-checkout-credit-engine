@@ -88,6 +88,13 @@ def test_comparisons_cover_reference_and_text_versus_tabular_only():
     assert len(pairs) == 5
 
 
+def test_comparisons_include_distilbert_over_tfidf_when_both_text_variants_run():
+    names = ["reference", "tabular_only_platt", "tabular_tfidf_platt", "tabular_tfidf_distilbert_platt"]
+    pairs = stacker.comparison_pairs({name: np.zeros(1) for name in names})
+    assert ("tabular_tfidf_distilbert_platt", "tabular_tfidf_platt") in pairs
+    assert len(pairs) == 6
+
+
 def test_artifact_records_fit_roles_and_unweighted_settings(tables, config):
     fitted = stacker.fit_variant("tabular_only", ["tabular"], tables, config)
     artifact = stacker.variant_artifact(fitted, config)
