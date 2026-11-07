@@ -1,0 +1,34 @@
+{
+  "stacker_version": "fusion-stacker-v1",
+  "variant": "tabular_tfidf",
+  "tracks": [
+    "tabular",
+    "tfidf"
+  ],
+  "input_columns": [
+    "p_default_tabular",
+    "p_default_tfidf"
+  ],
+  "input_space": "probability",
+  "stacker": {
+    "coefficients": [
+      3.9407893610374565,
+      4.903462793424929
+    ],
+    "intercept": -4.546946967068731,
+    "C": 1.0,
+    "class_weight": null,
+    "fit_role": "fusion_fit"
+  },
+  "calibrator": {
+    "method": "platt",
+    "fit_role": "fusion_calibration",
+    "probability_clip": 1e-06,
+    "slope": 1.0509047628977413,
+    "intercept": 0.12986981922513158
+  },
+  "source_versions": {
+    "tabular": "tabular-logistic-v1-model-fit",
+    "tfidf": "nlp-tfidf-fusion-v2"
+  }
+}

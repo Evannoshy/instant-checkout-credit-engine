@@ -1,0 +1,30 @@
+{
+  "stacker_version": "fusion-stacker-v1",
+  "variant": "tabular_only",
+  "tracks": [
+    "tabular"
+  ],
+  "input_columns": [
+    "p_default_tabular"
+  ],
+  "input_space": "probability",
+  "stacker": {
+    "coefficients": [
+      4.147461532840372
+    ],
+    "intercept": -3.868800292761548,
+    "C": 1.0,
+    "class_weight": null,
+    "fit_role": "fusion_fit"
+  },
+  "calibrator": {
+    "method": "platt",
+    "fit_role": "fusion_calibration",
+    "probability_clip": 1e-06,
+    "slope": 1.0401025980202314,
+    "intercept": 0.131066930516805
+  },
+  "source_versions": {
+    "tabular": "tabular-logistic-v1-model-fit"
+  }
+}

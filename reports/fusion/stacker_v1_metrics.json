@@ -1,0 +1,433 @@
+{
+  "stacker_version": "fusion-stacker-v1",
+  "fusion_development_version": "fusion_development_v1",
+  "status": "development",
+  "variants_run": [
+    "tabular_only",
+    "tabular_tfidf",
+    "tabular_tfidf_distilbert"
+  ],
+  "rows": {
+    "fusion_fit": 15587,
+    "fusion_calibration": 11353,
+    "validation": 21784
+  },
+  "test_rows_read": 0,
+  "validation_metrics": {
+    "reference": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.15103600381317703,
+      "mean_p_minus_prevalence": -0.0003595158342706295,
+      "roc_auc": 0.6659989100958312,
+      "pr_auc": 0.2575375225373021,
+      "brier_score": 0.12250249503423159,
+      "log_loss": 0.40305057453384624
+    },
+    "tabular_only_raw": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.14758194971780966,
+      "mean_p_minus_prevalence": -0.0038135699296379943,
+      "roc_auc": 0.6659989100958312,
+      "pr_auc": 0.2575375225373021,
+      "brier_score": 0.12247198828126918,
+      "log_loss": 0.40293716425605897
+    },
+    "tabular_only_platt": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.15556778072186536,
+      "mean_p_minus_prevalence": 0.004172261074417705,
+      "roc_auc": 0.6659989100958312,
+      "pr_auc": 0.2575375225373021,
+      "brier_score": 0.1224602807215816,
+      "log_loss": 0.4029169643002899
+    },
+    "tabular_tfidf_raw": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.14981406466438132,
+      "mean_p_minus_prevalence": -0.0015814549830663327,
+      "roc_auc": 0.6755858776185634,
+      "pr_auc": 0.2628117321678444,
+      "brier_score": 0.12180445901765258,
+      "log_loss": 0.4003465507107434
+    },
+    "tabular_tfidf_platt": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.1556574744008709,
+      "mean_p_minus_prevalence": 0.004261954753423253,
+      "roc_auc": 0.6755858776185634,
+      "pr_auc": 0.2628117321678444,
+      "brier_score": 0.12183158774348773,
+      "log_loss": 0.40039972024994586
+    },
+    "tabular_tfidf_distilbert_raw": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.15075273705421002,
+      "mean_p_minus_prevalence": -0.0006427825932376341,
+      "roc_auc": 0.6791474537596084,
+      "pr_auc": 0.26648798013746666,
+      "brier_score": 0.121506299667651,
+      "log_loss": 0.39916381658509986
+    },
+    "tabular_tfidf_distilbert_platt": {
+      "rows": 21784,
+      "positives": 3298,
+      "prevalence": 0.15139551964744766,
+      "mean_p": 0.15577517926424678,
+      "mean_p_minus_prevalence": 0.00437965961679912,
+      "roc_auc": 0.6791474537596084,
+      "pr_auc": 0.26648798013746666,
+      "brier_score": 0.12153361520957115,
+      "log_loss": 0.3992439661518587
+    }
+  },
+  "comparisons": {
+    "tabular_only_raw_minus_reference": {
+      "roc_auc": {
+        "delta": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "pr_auc": {
+        "delta": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "brier_score": {
+        "delta": -3.050675296241423e-05,
+        "ci_low": -0.00011801107775022724,
+        "ci_high": 5.376867749831981e-05
+      },
+      "log_loss": {
+        "delta": -0.00011341027778727364,
+        "ci_low": -0.000337368164533218,
+        "ci_high": 9.884806821777306e-05
+      }
+    },
+    "tabular_only_platt_minus_reference": {
+      "roc_auc": {
+        "delta": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "pr_auc": {
+        "delta": 0.0,
+        "ci_low": 0.0,
+        "ci_high": 0.0
+      },
+      "brier_score": {
+        "delta": -4.2214312649987984e-05,
+        "ci_low": -0.00012336419126880472,
+        "ci_high": 4.437514309791613e-05
+      },
+      "log_loss": {
+        "delta": -0.00013361023355634716,
+        "ci_low": -0.00035445892734838606,
+        "ci_high": 0.00010563638338983852
+      }
+    },
+    "tabular_tfidf_raw_minus_reference": {
+      "roc_auc": {
+        "delta": 0.009586967522732137,
+        "ci_low": 0.005816050979476132,
+        "ci_high": 0.013245622420642979
+      },
+      "pr_auc": {
+        "delta": 0.005274209630542315,
+        "ci_low": -0.00023851908309646303,
+        "ci_high": 0.011318671070885744
+      },
+      "brier_score": {
+        "delta": -0.000698036016579015,
+        "ci_low": -0.0010136520915546767,
+        "ci_high": -0.0003749082002355145
+      },
+      "log_loss": {
+        "delta": -0.0027040238231028635,
+        "ci_low": -0.0036941351304785063,
+        "ci_high": -0.0016555361993645453
+      }
+    },
+    "tabular_tfidf_platt_minus_reference": {
+      "roc_auc": {
+        "delta": 0.009586967522732137,
+        "ci_low": 0.005816050979476132,
+        "ci_high": 0.013245622420642979
+      },
+      "pr_auc": {
+        "delta": 0.005274209630542315,
+        "ci_low": -0.00023851908309646303,
+        "ci_high": 0.011318671070885744
+      },
+      "brier_score": {
+        "delta": -0.0006709072907438579,
+        "ci_low": -0.0010268479990212687,
+        "ci_high": -0.0003175091929647452
+      },
+      "log_loss": {
+        "delta": -0.0026508542839003835,
+        "ci_low": -0.0037120145856253256,
+        "ci_high": -0.0015694158356697751
+      }
+    },
+    "tabular_tfidf_distilbert_raw_minus_reference": {
+      "roc_auc": {
+        "delta": 0.013148543663777157,
+        "ci_low": 0.008403473707938092,
+        "ci_high": 0.017968263101739993
+      },
+      "pr_auc": {
+        "delta": 0.008950457600164552,
+        "ci_low": 0.0022935247717745045,
+        "ci_high": 0.016340980185227588
+      },
+      "brier_score": {
+        "delta": -0.0009961953665805906,
+        "ci_low": -0.0014348743399100385,
+        "ci_high": -0.000550694611289489
+      },
+      "log_loss": {
+        "delta": -0.0038867579487463777,
+        "ci_low": -0.005223174689474985,
+        "ci_high": -0.0024465987116841837
+      }
+    },
+    "tabular_tfidf_distilbert_platt_minus_reference": {
+      "roc_auc": {
+        "delta": 0.013148543663777157,
+        "ci_low": 0.008403473707938092,
+        "ci_high": 0.017968263101739993
+      },
+      "pr_auc": {
+        "delta": 0.008950457600164552,
+        "ci_low": 0.0022935247717745045,
+        "ci_high": 0.016340980185227588
+      },
+      "brier_score": {
+        "delta": -0.000968879824660443,
+        "ci_low": -0.0014374110893506798,
+        "ci_high": -0.00048523966764945644
+      },
+      "log_loss": {
+        "delta": -0.003806608381987542,
+        "ci_low": -0.00522903490750719,
+        "ci_high": -0.002385163027891555
+      }
+    },
+    "tabular_tfidf_platt_minus_tabular_only_platt": {
+      "roc_auc": {
+        "delta": 0.009586967522732137,
+        "ci_low": 0.005816050979476132,
+        "ci_high": 0.013245622420642979
+      },
+      "pr_auc": {
+        "delta": 0.005274209630542315,
+        "ci_low": -0.00023851908309646303,
+        "ci_high": 0.011318671070885744
+      },
+      "brier_score": {
+        "delta": -0.0006286929780938699,
+        "ci_low": -0.0009635208576165604,
+        "ci_high": -0.0002854393813944603
+      },
+      "log_loss": {
+        "delta": -0.0025172440503440363,
+        "ci_low": -0.0035476653595954404,
+        "ci_high": -0.0014460950916400787
+      }
+    },
+    "tabular_tfidf_distilbert_platt_minus_tabular_only_platt": {
+      "roc_auc": {
+        "delta": 0.013148543663777157,
+        "ci_low": 0.008403473707938092,
+        "ci_high": 0.017968263101739993
+      },
+      "pr_auc": {
+        "delta": 0.008950457600164552,
+        "ci_low": 0.0022935247717745045,
+        "ci_high": 0.016340980185227588
+      },
+      "brier_score": {
+        "delta": -0.000926665512010455,
+        "ci_low": -0.0013741653229264262,
+        "ci_high": -0.00047799055500178864
+      },
+      "log_loss": {
+        "delta": -0.0036729981484311947,
+        "ci_low": -0.005043151310284015,
+        "ci_high": -0.0022092941873129604
+      }
+    },
+    "tabular_tfidf_distilbert_platt_minus_tabular_tfidf_platt": {
+      "roc_auc": {
+        "delta": 0.0035615761410450197,
+        "ci_low": 0.0009229991874629168,
+        "ci_high": 0.006271819167000714
+      },
+      "pr_auc": {
+        "delta": 0.003676247969622237,
+        "ci_low": -0.0002051558730005368,
+        "ci_high": 0.007282983170428236
+      },
+      "brier_score": {
+        "delta": -0.00029797253391658507,
+        "ci_low": -0.0005405138030182113,
+        "ci_high": -2.568273306286577e-05
+      },
+      "log_loss": {
+        "delta": -0.0011557540980871583,
+        "ci_low": -0.001955482466590808,
+        "ci_high": -0.0003355551925389072
+      }
+    }
+  },
+  "decision": {
+    "status": "pending lead confirmation",
+    "proposed_margin": 0.005,
+    "note": "Proposed practical target only, not a significance test and not an approved rule."
+  },
+  "artifacts": {
+    "tabular_only": {
+      "stacker_version": "fusion-stacker-v1",
+      "variant": "tabular_only",
+      "tracks": [
+        "tabular"
+      ],
+      "input_columns": [
+        "p_default_tabular"
+      ],
+      "input_space": "probability",
+      "stacker": {
+        "coefficients": [
+          4.147461532840372
+        ],
+        "intercept": -3.868800292761548,
+        "C": 1.0,
+        "class_weight": null,
+        "fit_role": "fusion_fit"
+      },
+      "calibrator": {
+        "method": "platt",
+        "fit_role": "fusion_calibration",
+        "probability_clip": 1e-06,
+        "slope": 1.0401025980202314,
+        "intercept": 0.131066930516805
+      },
+      "source_versions": {
+        "tabular": "tabular-logistic-v1-model-fit"
+      }
+    },
+    "tabular_tfidf": {
+      "stacker_version": "fusion-stacker-v1",
+      "variant": "tabular_tfidf",
+      "tracks": [
+        "tabular",
+        "tfidf"
+      ],
+      "input_columns": [
+        "p_default_tabular",
+        "p_default_tfidf"
+      ],
+      "input_space": "probability",
+      "stacker": {
+        "coefficients": [
+          3.9407893610374565,
+          4.903462793424929
+        ],
+        "intercept": -4.546946967068731,
+        "C": 1.0,
+        "class_weight": null,
+        "fit_role": "fusion_fit"
+      },
+      "calibrator": {
+        "method": "platt",
+        "fit_role": "fusion_calibration",
+        "probability_clip": 1e-06,
+        "slope": 1.0509047628977413,
+        "intercept": 0.12986981922513158
+      },
+      "source_versions": {
+        "tabular": "tabular-logistic-v1-model-fit",
+        "tfidf": "nlp-tfidf-fusion-v2"
+      }
+    },
+    "tabular_tfidf_distilbert": {
+      "stacker_version": "fusion-stacker-v1",
+      "variant": "tabular_tfidf_distilbert",
+      "tracks": [
+        "tabular",
+        "tfidf",
+        "distilbert"
+      ],
+      "input_columns": [
+        "p_default_tabular",
+        "p_default_tfidf",
+        "p_default_distilbert"
+      ],
+      "input_space": "probability",
+      "stacker": {
+        "coefficients": [
+          3.8504217257477906,
+          2.3113757784571285,
+          2.2009692409991866
+        ],
+        "intercept": -4.502462383377955,
+        "C": 1.0,
+        "class_weight": null,
+        "fit_role": "fusion_fit"
+      },
+      "calibrator": {
+        "method": "platt",
+        "fit_role": "fusion_calibration",
+        "probability_clip": 1e-06,
+        "slope": 1.0104700794149943,
+        "intercept": 0.05778729881788956
+      },
+      "source_versions": {
+        "tabular": "tabular-logistic-v1-model-fit",
+        "tfidf": "nlp-tfidf-fusion-v2",
+        "distilbert": "nlp-distilbert-fusion-v2"
+      }
+    }
+  },
+  "inputs_sha256": {
+    "data/fusion/fusion_roles_v1.csv": "68599e30673a8099feadd3c7961f70dcc72bf082266d4a891c2e48f54664b20e",
+    "data/tabular/tabular_calibrated_val.parquet": "ba9b60eee57c56ef2a1505df5318e849dc52fe10e7522c5e6622d9472bb89b6d",
+    "data/nlp/distilbert_scores_v2.parquet": "c2f8017a02d9a6af7d84041c0534d88c123f65332ceac74886bc15e50d7c19b0",
+    "reports/tabular/raw_predictions/logistic_regression_calibration.csv": "d16f15f0b6dbd27ed93dba4f96fb19631b5a22cabb4acdfe13fb8ef95835a532",
+    "reports/tabular/raw_predictions/logistic_regression_validation.csv": "84d845fcabd097aead2f70f0ca017c324d7abfa6db0a313fe8c851586759fbc9",
+    "data/nlp/tfidf_scores_v2.parquet": "02fb68561051b82755e3a6279677ec0033542889d16cd2151c0dcb1b69cfac1e",
+    "configs/fusion_stacker_v1.toml": "db581d480b5b61e02f95efaa1e3d95f07d298ef9ada7f9cff9c6e4e932a41aec"
+  },
+  "commands": [
+    "python -m src.fusion.stacker",
+    "python -m pytest src/fusion -q"
+  ],
+  "environment": {
+    "python": "3.13.9",
+    "numpy": "2.3.5",
+    "pandas": "2.3.3",
+    "scikit-learn": "1.7.2",
+    "platform": "Darwin"
+  },
+  "outputs_sha256": {
+    "data/fusion/stacker_v1/predictions_fusion_calibration.parquet": "ad12aa26a340a063fef36d4c053f41b5872b91acfd49e911b7f0ce1bd5d2d1a0",
+    "data/fusion/stacker_v1/predictions_validation.parquet": "2a229e0616a0d46b63e34ff184ddf57a5f2cd06d88b752c627a301f73e6b15f3",
+    "data/fusion/stacker_v1/tabular_only.json": "00b487d0486f2c9c578f1ea8f4a20b40bfa8e93764bd9263a2674d977a5f0560",
+    "data/fusion/stacker_v1/tabular_tfidf.json": "7856aab4f53a79969cb1e775d6635e4af1910135fba470357e30f325084896fe",
+    "data/fusion/stacker_v1/tabular_tfidf_distilbert.json": "d32186363f75525e59a0ec87de6af13030bb8bd8d482e0ebbc24ae021489fa53",
+    "reports/fusion/stacker_v1_results.csv": "91433f0c14548a1c5888b213c24125ffab79bd1194288a6ad7dfefb3ace2af94",
+    "reports/fusion/stacker_v1_calibration.png": "147160e17bf1bef155b4ad5c0eba6993f1aac6346cfc036b43d02a28eb6a5010"
+  }
+}
