@@ -31,7 +31,9 @@ Known limitations:
 - Whether text is usable is the caller's decision. Evan and Ariel have not yet
   confirmed the definition (empty description vs empty cleaned
   title-purpose-description payload), so this module does not decide it.
-- The committed variant is ``tabular_only``; text variants need the v2 NLP exports.
+- Committed variants: ``tabular_only``, ``tabular_tfidf`` and ``tabular_tfidf_distilbert``. Text
+  scores must be the RAW v2 export probabilities (``nlp-tfidf-fusion-v2``, ``nlp-distilbert-fusion-v2``).
+- Which variant ships is not decided: Evan and Ariel have not confirmed the decision rule.
 """
 
 from __future__ import annotations

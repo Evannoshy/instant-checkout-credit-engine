@@ -23,6 +23,7 @@ from src.fusion.inputs import ERROR_MESSAGES, NLP_SCORE_COLUMNS
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPOSITORY_ROOT / "configs" / "fusion_stacker_v1.toml"
 REAL_ROLE_ROWS = {"fusion_fit": 15_587, "fusion_calibration": 11_353, "validation": 21_784}
+RUN_LINE = 'variants = ["tabular_only", "tabular_tfidf", "tabular_tfidf_distilbert"]'
 
 
 def _message(key: str) -> str:
@@ -60,9 +61,11 @@ def _nlp_scores() -> pd.DataFrame:
 
 # --- config ---------------------------------------------------------------------------------
 
-def test_committed_config_runs_only_the_tabular_variant_and_is_unweighted():
+def test_committed_config_runs_all_three_variants_on_pinned_nlp_exports_and_is_unweighted():
     config = inputs.load_stacker_config(CONFIG_PATH)
-    assert config["run"]["variants"] == ["tabular_only"]
+    assert config["run"]["variants"] == ["tabular_only", "tabular_tfidf", "tabular_tfidf_distilbert"]
+    assert config["sources"]["tfidf"]["model_version"] == "nlp-tfidf-fusion-v2"
+    assert config["sources"]["distilbert"]["model_version"] == "nlp-distilbert-fusion-v2"
     assert config["stacker"]["class_weight"] == "none"
     assert config["evaluation"]["bootstrap_resamples"] == 1000
     assert config["evaluation"]["decision_rule_status"] == "pending lead confirmation"
@@ -72,8 +75,8 @@ def test_committed_config_runs_only_the_tabular_variant_and_is_unweighted():
     (('class_weight = "none"', 'class_weight = "balanced"'), "bad_setting"),
     (('input_space = "probability"', 'input_space = "logit"'), "bad_setting"),
     (('method = "platt"', 'method = "isotonic"'), "bad_setting"),
-    (('variants = ["tabular_only"]', 'variants = ["missing"]'), "unknown_variant"),
-    (('variants = ["tabular_only"]', "variants = []"), "empty_run"),
+    ((RUN_LINE, 'variants = ["missing"]'), "unknown_variant"),
+    ((RUN_LINE, "variants = []"), "empty_run"),
     (('tabular_only = ["tabular"]', "tabular_only = []"), "empty_variant"),
 ])
 def test_config_rejects_unapproved_settings(tmp_path, edit, key):
@@ -81,8 +84,8 @@ def test_config_rejects_unapproved_settings(tmp_path, edit, key):
         inputs.load_stacker_config(_write_config(tmp_path, edit))
 
 
-def test_running_a_variant_whose_text_track_is_not_published_stops_instead_of_skipping(tmp_path):
-    path = _write_config(tmp_path, ('variants = ["tabular_only"]', 'variants = ["tabular_only", "tabular_tfidf"]'))
+def test_running_a_variant_whose_text_track_has_no_source_stops_instead_of_skipping(tmp_path):
+    path = _write_config(tmp_path, ("[sources.distilbert]", "[unpublished.distilbert]"))
     with pytest.raises(ValueError, match=_message("track_without_source")):
         inputs.load_stacker_config(path)
 

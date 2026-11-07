@@ -27,15 +27,23 @@ fusion_sha256 = "d16f15f0b6dbd27ed93dba4f96fb19631b5a22cabb4acdfe13fb8ef95835a53
 validation_path = "reports/tabular/raw_predictions/logistic_regression_validation.csv"
 validation_sha256 = "84d845fcabd097aead2f70f0ca017c324d7abfa6db0a313fe8c851586759fbc9"
 
-# Pending (Yati): add when data/nlp/tfidf_scores_v2.parquet is published.
-# [sources.tfidf]
-# format = "nlp_scores_v2"
-# path = "data/nlp/tfidf_scores_v2.parquet"
-# sha256 = "<from Yati's manifest>"
-# model_version = "<new unweighted version>"
+# Both NLP exports hold RAW, uncalibrated probabilities from models fitted on base_fit months
+# only; the stacker reads them as inputs and the final Platt step calibrates the stacked output.
+# Checksums match each track's manifest (reports/nlp/<track>_scores_v2_manifest.json).
 
-# Pending (Vincent, PR #25): add when data/nlp/distilbert_scores_v2.parquet is merged.
-# [sources.distilbert]
+# Yati, PR #29: unweighted TF-IDF logistic regression.
+[sources.tfidf]
+format = "nlp_scores_v2"
+path = "data/nlp/tfidf_scores_v2.parquet"
+sha256 = "02fb68561051b82755e3a6279677ec0033542889d16cd2151c0dcb1b69cfac1e"
+model_version = "nlp-tfidf-fusion-v2"
+
+# Vincent, PR #25: unweighted DistilBERT, trained 2007-06 to 2012-09, selected on 2012-10 to 2012-12.
+[sources.distilbert]
+format = "nlp_scores_v2"
+path = "data/nlp/distilbert_scores_v2.parquet"
+sha256 = "c2f8017a02d9a6af7d84041c0534d88c123f65332ceac74886bc15e50d7c19b0"
+model_version = "nlp-distilbert-fusion-v2"
 
 # The existing calibrated tabular reference: benchmark and fallback only, never a stacker input.
 # Its Platt mapping (tabular_calibration_v1) was fitted on all 26,940 Jan-Jul 2013 loans, which
@@ -59,7 +67,7 @@ tabular_tfidf = ["tabular", "tfidf"]
 tabular_tfidf_distilbert = ["tabular", "tfidf", "distilbert"]
 
 [run]
-variants = ["tabular_only"]
+variants = ["tabular_only", "tabular_tfidf", "tabular_tfidf_distilbert"]
 
 # Regularised logistic regression on raw probabilities, unweighted (class_weight = None).
 [stacker]

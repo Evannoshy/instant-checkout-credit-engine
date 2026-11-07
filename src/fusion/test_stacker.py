@@ -21,6 +21,7 @@ from src.fusion import inputs, stacker
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPOSITORY_ROOT / "configs" / "fusion_stacker_v1.toml"
+VARIANTS = ("tabular_only", "tabular_tfidf", "tabular_tfidf_distilbert")
 TRACKS = ["tabular", "tfidf"]
 
 
@@ -123,7 +124,10 @@ def test_real_run_fits_and_grades_on_the_agreed_rows(real_run):
     metrics, _ = real_run
     assert metrics["rows"] == {"fusion_fit": 15_587, "fusion_calibration": 11_353, "validation": 21_784}
     assert metrics["test_rows_read"] == 0
-    assert set(metrics["validation_metrics"]) == {"reference", "tabular_only_raw", "tabular_only_platt"}
+    assert set(metrics["validation_metrics"]) == {
+        "reference", *(f"{variant}_{kind}" for variant in VARIANTS for kind in ("raw", "platt")),
+    }
+    assert "tabular_tfidf_distilbert_platt_minus_tabular_tfidf_platt" in metrics["comparisons"]
     assert metrics["decision"]["status"] == "pending lead confirmation"
 
 
@@ -144,5 +148,6 @@ def test_real_run_writes_versioned_predictions_and_checksummed_outputs(real_run)
     written = json.loads((out / "reports" / "stacker_v1_metrics.json").read_text(encoding="utf-8"))
     assert sorted(Path(path).name for path in written["outputs_sha256"]) == [
         "predictions_fusion_calibration.parquet", "predictions_validation.parquet",
-        "stacker_v1_calibration.png", "stacker_v1_results.csv", "tabular_only.json",
+        "stacker_v1_calibration.png", "stacker_v1_results.csv",
+        "tabular_only.json", "tabular_tfidf.json", "tabular_tfidf_distilbert.json",
     ]

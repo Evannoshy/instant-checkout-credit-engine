@@ -144,3 +144,24 @@ def test_artifact_for_another_variant_is_refused(tmp_path):
     (tmp_path / "tabular_tfidf.json").write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
     with pytest.raises(ValueError, match=_message("artifact_mismatch")):
         predict.load_predictor("tabular_tfidf", artifact_dir=tmp_path)
+
+
+def test_three_score_predictor_reproduces_committed_validation_predictions():
+    predictor = predict.load_predictor("tabular_tfidf_distilbert")
+    committed = pd.read_parquet(REPOSITORY_ROOT / "data" / "fusion" / "stacker_v1" / "predictions_validation.parquet")
+    tabular = pd.read_csv(
+        REPOSITORY_ROOT / "reports" / "tabular" / "raw_predictions" / "logistic_regression_validation.csv",
+        dtype={"loan_id": str},
+    ).set_index("loan_id")["p_default_tabular"]
+    text = {
+        track: pd.read_parquet(REPOSITORY_ROOT / "data" / "nlp" / f"{track}_scores_v2.parquet").set_index("loan_id")["raw_prob"]
+        for track in ("tfidf", "distilbert")
+    }
+    rebuilt = [
+        predict.predict(predictor, {"tabular": tabular[loan], **{t: s[loan] for t, s in text.items()}}, text_usable=True)
+        for loan in committed["loan_id"]
+    ]
+    assert {r["model_version"] for r in rebuilt} == {"fusion-stacker-v1/tabular_tfidf_distilbert"}
+    np.testing.assert_allclose(
+        [r["p_default"] for r in rebuilt], committed["p_tabular_tfidf_distilbert_platt"], rtol=0, atol=1e-12,
+    )
