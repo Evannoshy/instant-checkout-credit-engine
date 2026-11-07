@@ -1,0 +1,28 @@
+{
+  "device": "cpu",
+  "precision": "fp32",
+  "torch_threads": 2,
+  "versions": {
+    "python": "3.12.3",
+    "torch": "2.9.0+cu128",
+    "transformers": "5.17.0"
+  },
+  "model": {
+    "source": "models/distilbert_fusion_v2",
+    "revision": null
+  },
+  "load_seconds": 0.44773238990455866,
+  "single_loan_ms": {
+    "loans": 200,
+    "warmup_calls": 10,
+    "p50": 96.64823999628425,
+    "p95": 169.89984875544903,
+    "mean": 105.89058381738141
+  },
+  "batch": {
+    "loans": 2000,
+    "batch_size": 32,
+    "seconds": 166.36257175612263,
+    "loans_per_second": 12.021934855226197
+  }
+}

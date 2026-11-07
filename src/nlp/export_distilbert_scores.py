@@ -1,115 +1,231 @@
-"""Export DistilBERT default probabilities for the tabular track.
+"""Export DistilBERT v2 scores for the fusion stacker, and score one borrower's text.
 
-Run from the repository root on the GPU node:
-    python -m src.nlp.export_distilbert_scores [--model-dir DIR] [--holdout-model-dir DIR] [--output-dir DIR]
+Run from the repository root on the GPU node, after --stage fusion of train_distilbert_prototype:
+    python -m src.nlp.export_distilbert_scores [--model-dir DIR] [--hub-repo REPO --hub-revision SHA]
 
-No loan is scored by a model that trained on it: distilbert_10k scores every loan except its
-own 10,000 training loans, which distilbert_10k_holdout scores; model_version records which.
-Probabilities are uncalibrated (class weighting inflates them).
+distilbert_fusion_v2 trained and chose its checkpoint on base_fit loans only, so one model scores all
+48,724 fusion_fit, fusion_calibration and validation loans (fusion task sheet). raw_margin is the
+default logit minus the non-default logit; raw_prob = sigmoid(raw_margin) is uncalibrated.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
+import hashlib
 import json
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import torch
+import transformers
 from sklearn.metrics import roc_auc_score
-from torch.utils.data import DataLoader, Subset
-from transformers import DataCollatorWithPadding, DistilBertForSequenceClassification, DistilBertTokenizerFast
+from transformers import DistilBertForSequenceClassification, DistilBertTokenizerFast
 
-from src.nlp.dataset import LoanTextDataset
-from src.nlp.preprocess import load_original_split
-from src.nlp.train_distilbert_prototype import DATA_DIR, MODEL_DIR, MODEL_NAME, default_probability, precision
+from src.nlp.dataset import MAX_LENGTH
+from src.nlp.features_lexical import tokenize_words
+from src.nlp.preprocess import PREPROCESS_VERSION, build_text_payload, clean_text, load_original_split, sha256_file
+from src.nlp.train_distilbert_prototype import (
+    DATA_DIR,
+    FUSION_NAME,
+    FUSION_POOL_ROWS,
+    FUSION_SELECTION_MONTHS,
+    FUSION_TRAIN_MONTHS,
+    MODEL_DIR,
+    MODEL_NAME,
+    REPORT_DIR,
+    precision,
+)
 
-SCALED_MODEL_DIR = MODEL_DIR.with_name("distilbert_10k")
-HOLDOUT_MODEL_DIR = MODEL_DIR.with_name("distilbert_10k_holdout")
-PROBABILITY_COLUMN = "prob_default_distilbert"
-MODEL_VERSION = "nlp-distilbert-10k-v1"
-HOLDOUT_MODEL_VERSION = "nlp-distilbert-10k-holdout-v1"
+MODEL_DIR_V2 = MODEL_DIR.with_name(FUSION_NAME)
+MODEL_VERSION = "nlp-distilbert-fusion-v2"
+OUTPUT = DATA_DIR / "nlp" / "distilbert_scores_v2.parquet"
+MANIFEST = REPORT_DIR / "distilbert_scores_v2_manifest.json"
+ROLE_MAPPING = DATA_DIR / "fusion" / "fusion_roles_v1.csv"
+ROLE_MAPPING_SHA256 = "68599e30673a8099feadd3c7961f70dcc72bf082266d4a891c2e48f54664b20e"
+COLUMNS = ["loan_id", "split", "role", "raw_margin", "raw_prob", "model_version"]
+ROLE_MONTHS = {
+    "fusion_fit": ("2013-01", "2013-04"),
+    "fusion_calibration": ("2013-05", "2013-07"),
+    "validation": ("2013-08", "2013-12"),
+}
+ROLE_ROWS = {"fusion_fit": 15_587, "fusion_calibration": 11_353, "validation": 21_784}
+ROLE_SPLIT = {"fusion_fit": "train", "fusion_calibration": "train", "validation": "validation"}
 INFERENCE_BATCH_SIZE = 128  # 8x training: no gradients or optimizer state to hold
-OUTPUTS = {"train": "distilbert_scores_train.parquet", "validation": "distilbert_scores_val.parquet"}
 
 
-@torch.no_grad()
+@functools.cache
+def load_model(
+    source: str, revision: str | None = None
+) -> tuple[DistilBertForSequenceClassification, DistilBertTokenizerFast]:
+    """A saved model and its tokenizer from a local dir or Hub repo, loaded once per process."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = DistilBertForSequenceClassification.from_pretrained(source, revision=revision).to(device)
+    return model, DistilBertTokenizerFast.from_pretrained(source, revision=revision)
+
+
+@torch.inference_mode()
 def score(
     model: DistilBertForSequenceClassification,
     tokenizer: DistilBertTokenizerFast,
-    df: pd.DataFrame,
+    texts: Sequence[str],
     batch_size: int = INFERENCE_BATCH_SIZE,
-) -> np.ndarray:
-    """P(default) for every row of df, returned in df's row order."""
+) -> tuple[np.ndarray, np.ndarray]:
+    """(raw_margin, raw_prob) for each text, in input order."""
     model.eval()
     device = model.device
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(precision())
-    # Batch similar lengths together to cut padding; probs[order] restores the input order.
-    order = np.argsort(df["text_payload"].str.len().to_numpy(), kind="stable")
-    loader = DataLoader(
-        Subset(LoanTextDataset(df, tokenizer), order.tolist()),
-        batch_size=batch_size,
-        collate_fn=DataCollatorWithPadding(tokenizer),
-    )
-    logits = []
-    for batch in loader:
-        batch.pop("labels")
+    texts = list(texts)
+    order = torch.from_numpy(np.argsort([len(t) for t in texts], kind="stable"))  # similar lengths cut padding
+    logits = torch.empty(len(texts), 2, dtype=torch.float64)
+    for rows in order.split(batch_size):
+        batch = tokenizer(
+            [texts[i] for i in rows.tolist()], truncation=True, max_length=MAX_LENGTH, padding=True, return_tensors="pt"
+        )
         with torch.autocast(device.type, dtype=dtype, enabled=device.type == "cuda"):
-            logits.append(model(**batch.to(device)).logits.float().cpu())
-    probs = np.empty(len(df))
-    probs[order] = default_probability(torch.cat(logits).numpy())
-    return probs
+            logits[rows] = model(**batch.to(device)).logits.cpu().double()
+    return (logits[:, 1] - logits[:, 0]).numpy(), logits.softmax(-1)[:, 1].numpy()
 
 
-def load(model_dir: Path, device: torch.device) -> tuple[DistilBertForSequenceClassification, set[str]]:
-    """A saved model and the loan IDs it was trained on."""
-    model = DistilBertForSequenceClassification.from_pretrained(model_dir).to(device)
-    record = json.loads((model_dir / "metrics.json").read_text(encoding="utf-8"))
-    return model, set(record["sample_loan_ids"]["train"])
+def score_borrower_text(
+    title: str | None,
+    purpose: str | None,
+    desc: str | None,
+    *,
+    model: str | Path = MODEL_DIR_V2,
+    revision: str | None = None,
+) -> dict[str, Any]:
+    """Score one borrower with the export's preprocessing and model; no score when the text is unusable.
+
+    text_usable: the cleaned title + purpose + description payload is non-empty.
+    desc_usable: the description has at least one word, the rule behind desc_distress density 0.0.
+    The demo's missing-text policy still needs agreement between the track leads.
+    """
+    payload = build_text_payload({"title": title, "purpose": purpose, "desc": desc})
+    result = {
+        "text_usable": bool(payload),
+        "desc_usable": bool(tokenize_words(clean_text(desc))),
+        "raw_margin": None,
+        "raw_prob": None,
+        "model_version": MODEL_VERSION,
+        "preprocess_version": PREPROCESS_VERSION,
+    }
+    if payload:
+        margin, prob = score(*load_model(str(model), revision), [payload], batch_size=1)
+        result.update(raw_margin=float(margin[0]), raw_prob=float(prob[0]))
+    return result
+
+
+def development_rows() -> pd.DataFrame:
+    """The loans to score, in frozen train-then-validation ID order, with their fusion role; base_fit is dropped."""
+    rows = pd.concat([load_original_split(DATA_DIR, split) for split in ("train", "validation")], ignore_index=True)
+    rows["role"] = pd.Series(pd.NA, index=rows.index, dtype="string")
+    for role, (first, last) in ROLE_MONTHS.items():
+        rows.loc[rows["issue_month"].between(first, last), "role"] = role
+    return rows[rows["role"].notna()].reset_index(drop=True)
+
+
+def load_role_mapping(path: Path = ROLE_MAPPING) -> pd.DataFrame:
+    """Read the published role mapping only if its pinned checksum matches."""
+    if sha256_file(path) != ROLE_MAPPING_SHA256:
+        raise ValueError("Shared role mapping checksum mismatch; review the contract before rescoring")
+    return pd.read_csv(path, dtype="string")
+
+
+def check_export(frame: pd.DataFrame, model_ids: set[str]) -> None:
+    """Raise unless frame meets the shared six-column contract and scores no loan the model trained or selected on."""
+    if frame.columns.tolist() != COLUMNS:
+        raise ValueError(f"Columns {frame.columns.tolist()} differ from {COLUMNS}")
+    counts = frame["role"].value_counts().to_dict()
+    checks = {
+        f"role counts {counts} differ from {ROLE_ROWS}": counts != ROLE_ROWS,
+        "split does not match role": not frame["split"].eq(frame["role"].map(ROLE_SPLIT)).all(),
+        "duplicate loan_id": frame["loan_id"].duplicated().any(),
+        "missing loan_id": frame["loan_id"].isna().any(),
+        "wrong model_version": not frame["model_version"].eq(MODEL_VERSION).fillna(False).all(),
+        "non-finite score": not np.isfinite(frame[["raw_margin", "raw_prob"]].to_numpy(dtype=float)).all(),
+        "raw_prob outside [0, 1]": not frame["raw_prob"].between(0, 1).all(),
+        "scores a loan the model trained or selected on": frame["loan_id"].isin(model_ids).any(),
+    }
+    if failures := [message for message, failed in checks.items() if failed]:
+        raise ValueError("Export check failed: " + "; ".join(failures))
+    expected = load_role_mapping()
+    expected = expected.loc[expected["role"].isin(ROLE_ROWS), ["loan_id", "split", "role"]]
+    if set(frame["loan_id"]) != set(expected["loan_id"]):
+        raise ValueError("Export loan IDs differ from the shared role mapping")
+    expected = expected.set_index("loan_id").loc[frame["loan_id"]]
+    for column in ("split", "role"):
+        if not np.array_equal(frame[column].to_numpy(), expected[column].to_numpy()):
+            raise ValueError(f"Export {column} disagrees with the shared role mapping for a loan_id")
+
+
+def id_set(ids: Sequence[str], months: tuple[str, str]) -> dict[str, Any]:
+    """An ID list with its month rule, count and SHA-256 (over the sorted IDs, newline-joined)."""
+    ids = sorted(ids)
+    digest = hashlib.sha256("\n".join(ids).encode()).hexdigest()
+    return {"months": list(months), "count": len(ids), "sha256": digest, "ids": ids}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--model-dir", type=Path, default=SCALED_MODEL_DIR)
-    parser.add_argument("--holdout-model-dir", type=Path, default=HOLDOUT_MODEL_DIR)
-    parser.add_argument("--output-dir", type=Path, default=DATA_DIR / "nlp")
+    parser.add_argument("--model-dir", type=Path, default=MODEL_DIR_V2)
+    parser.add_argument("--hub-repo", help="Private Hub repo holding the uploaded model, recorded in the manifest")
+    parser.add_argument("--hub-revision", help="Hub commit hash of that upload")
     args = parser.parse_args()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {device} ({precision()})")
-    model, trained_ids = load(args.model_dir, device)
-    holdout_model, holdout_ids = load(args.holdout_model_dir, device)
-    if trained_ids & holdout_ids:
-        raise ValueError("The holdout model trained on some of the main model's training loans")
-    tokenizer = DistilBertTokenizerFast.from_pretrained(args.model_dir)
+    record = json.loads((args.model_dir / "metrics.json").read_text(encoding="utf-8"))
+    used = record["sample_loan_ids"]
+    if (len(used["train"]), len(used["validation"])) != FUSION_POOL_ROWS:
+        raise ValueError(f"{args.model_dir} was not trained and selected on the full fusion pools {FUSION_POOL_ROWS}")
+    model, tokenizer = load_model(str(args.model_dir))
+    print(f"Device: {model.device} ({precision()})")
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    for split, filename in OUTPUTS.items():
-        df = load_original_split(DATA_DIR, split)
-        seen = df["loan_id"].isin(trained_ids).to_numpy()
-        if split == "train" and seen.sum() != len(trained_ids):
-            raise ValueError("Some of the main model's training loans are missing from the train split")
-        probs = np.empty(len(df))
-        probs[~seen] = score(model, tokenizer, df[~seen])
-        if seen.any():
-            probs[seen] = score(holdout_model, tokenizer, df[seen])
-        frame = pd.DataFrame({
-            "loan_id": df["loan_id"].astype("string"),
-            "split": split,
-            PROBABILITY_COLUMN: probs,
-            "model_name": MODEL_NAME,
-            "model_version": np.where(seen, HOLDOUT_MODEL_VERSION, MODEL_VERSION),
-        })
-        path = args.output_dir / filename
-        frame.to_parquet(path, index=False)
-        print(f"{split}: {len(frame)} rows -> {path}")
-        for version, rows in ((MODEL_VERSION, ~seen), (HOLDOUT_MODEL_VERSION, seen)):
-            if rows.any():
-                print(
-                    f"  {version}: {rows.sum()} rows, ROC-AUC {roc_auc_score(df['target'][rows], probs[rows]):.4f}, "
-                    f"mean P(default) {probs[rows].mean():.3f}"
-                )
+    rows = development_rows()
+    margin, prob = score(model, tokenizer, rows["text_payload"].tolist())
+    frame = pd.DataFrame({
+        "loan_id": rows["loan_id"],
+        "split": rows["split"],
+        "role": rows["role"],
+        "raw_margin": margin,
+        "raw_prob": prob,
+        "model_version": MODEL_VERSION,
+    }).astype({"loan_id": "string", "split": "string", "role": "string", "model_version": "string"})
+    check_export(frame, {*used["train"], *used["validation"]})
+
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(OUTPUT, index=False)
+    pd.testing.assert_frame_equal(pd.read_parquet(OUTPUT), frame)
+    print(f"{len(frame)} rows -> {OUTPUT}")
+    for role, group in rows.groupby("role", sort=False):
+        print(f"  {role}: {len(group)} loans, ROC-AUC {roc_auc_score(group['target'], prob[group.index]):.4f}")
+
+    manifest = {
+        "model_version": MODEL_VERSION,
+        "model_name": MODEL_NAME,
+        "preprocess_version": PREPROCESS_VERSION,
+        "hub": {"repo": args.hub_repo, "revision": args.hub_revision},
+        "training_ids": id_set(used["train"], FUSION_TRAIN_MONTHS),
+        "selection_ids": id_set(used["validation"], FUSION_SELECTION_MONTHS),
+        "roles": {role: {"months": list(ROLE_MONTHS[role]), "count": n} for role, n in ROLE_ROWS.items()},
+        "settings": record["config"],
+        "environment": {
+            "training": record["environment"],
+            "export": {"torch": torch.__version__, "transformers": transformers.__version__,
+                       "device": str(model.device), "precision": precision()},
+        },
+        "checksums": {
+            **{f"{args.model_dir.name}/{p.name}": sha256_file(p) for p in sorted(args.model_dir.iterdir()) if p.is_file()},
+            OUTPUT.name: sha256_file(OUTPUT),
+            "split_manifest.csv": sha256_file(DATA_DIR / "split_manifest.csv"),
+            "fusion_roles_v1.csv": sha256_file(ROLE_MAPPING),
+        },
+    }
+    MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+    MANIFEST.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print(f"Manifest -> {MANIFEST}")
 
 
 if __name__ == "__main__":

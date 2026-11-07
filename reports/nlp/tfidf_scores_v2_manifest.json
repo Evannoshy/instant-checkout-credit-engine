@@ -1,0 +1,203 @@
+{
+  "model_version": "nlp-tfidf-fusion-v2",
+  "model_name": "tfidf_logistic",
+  "preprocess_version": "nlp-preprocess-v1",
+  "status": "proposed",
+  "probability_semantics": "raw_unweighted_model_output_not_post_hoc_calibrated",
+  "fusion_development_version": "fusion_development_v1",
+  "naming": {
+    "authoritative_identifier": "model_version",
+    "config_file": "configs/nlp_tfidf_fusion_v2.toml",
+    "note": "The config is named for the model version it produces. The older configs/nlp_tfidf_v2.toml produces nlp-tfidf-tuned-v1; that file's counter was never aligned with its model version. Exports and manifests are keyed by model_version, not by config filename.",
+    "supersedes_for_fusion": "nlp-tfidf-tuned-v1",
+    "v1_exports_unchanged": [
+      "data/nlp/tfidf_oof_train.parquet",
+      "data/nlp/tfidf_oof_validate.parquet"
+    ]
+  },
+  "fitting_boundaries": {
+    "fit_role": "base_fit",
+    "fit_rows": 59353,
+    "fit_first_month": "2007-06",
+    "fit_last_month": "2012-12",
+    "fitted_on_scoring_roles": false,
+    "note": "Vocabulary, IDF weights, hyperparameter selection and coefficients all come from base_fit only."
+  },
+  "roles": {
+    "fusion_fit": {
+      "rows": 15587,
+      "first_month": "2013-01",
+      "last_month": "2013-04"
+    },
+    "fusion_calibration": {
+      "rows": 11353,
+      "first_month": "2013-05",
+      "last_month": "2013-07"
+    },
+    "validation": {
+      "rows": 21784,
+      "first_month": "2013-08",
+      "last_month": "2013-12"
+    }
+  },
+  "selection": {
+    "scoring": "average_precision",
+    "scheme": "expanding_window_time_ordered",
+    "scheme_source": "src.tabular.xgboost_baseline.time_aware_folds",
+    "n_folds": 5,
+    "min_train_share": 0.4,
+    "grid_size": 24,
+    "selected_on": "base_fit_time_ordered_folds_only",
+    "best_params": {
+      "max_features": 10000,
+      "ngram_range": [
+        1,
+        2
+      ],
+      "C": 0.1
+    },
+    "best_mean_cv_pr_auc": 0.22088216590402646,
+    "best_std_cv_pr_auc": 0.012471461735938378,
+    "folds": [
+      {
+        "fold_id": 0,
+        "fit_rows": 24119,
+        "holdout_rows": 7022,
+        "holdout_first_month": "2011-11",
+        "holdout_last_month": "2012-03"
+      },
+      {
+        "fold_id": 1,
+        "fit_rows": 31141,
+        "holdout_rows": 6033,
+        "holdout_first_month": "2012-04",
+        "holdout_last_month": "2012-06"
+      },
+      {
+        "fold_id": 2,
+        "fit_rows": 37174,
+        "holdout_rows": 7095,
+        "holdout_first_month": "2012-07",
+        "holdout_last_month": "2012-08"
+      },
+      {
+        "fold_id": 3,
+        "fit_rows": 44269,
+        "holdout_rows": 7883,
+        "holdout_first_month": "2012-09",
+        "holdout_last_month": "2012-10"
+      },
+      {
+        "fold_id": 4,
+        "fit_rows": 52152,
+        "holdout_rows": 7201,
+        "holdout_first_month": "2012-11",
+        "holdout_last_month": "2012-12"
+      }
+    ],
+    "fixed_model_settings": {
+      "class_weight": "None (unweighted)",
+      "max_iter": 1000,
+      "random_state": 42,
+      "sublinear_tf": true
+    }
+  },
+  "comparison_matched_conditions": {
+    "note": "Same base_fit rows, same folds, same winning settings; only class_weight differs.",
+    "unweighted": {
+      "validation": {
+        "rows": 21784,
+        "positives": 3298,
+        "prevalence": 0.15139551964744766,
+        "roc_auc": 0.5815651832829485,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.19275392522538623,
+        "pr_auc_baseline": 0.15139551964744766,
+        "brier_score": 0.12722867517409528,
+        "log_loss": 0.4202611024277099,
+        "f1_at_0.5": 0.0,
+        "f1_best": 0.2802967848309975,
+        "f1_best_threshold": 0.14681355321728
+      },
+      "mean_cv_pr_auc": 0.22088216590402646
+    },
+    "balanced": {
+      "validation": {
+        "rows": 21784,
+        "positives": 3298,
+        "prevalence": 0.15139551964744766,
+        "roc_auc": 0.5821961001481002,
+        "roc_auc_baseline": 0.5,
+        "pr_auc": 0.1920355562316544,
+        "pr_auc_baseline": 0.15139551964744766,
+        "brier_score": 0.24784236478035993,
+        "log_loss": 0.6891937618385017,
+        "f1_at_0.5": 0.27920646583394565,
+        "f1_best": 0.2816847479259732,
+        "f1_best_threshold": 0.4780163388682786
+      },
+      "mean_cv_pr_auc": 0.22104627362491974
+    }
+  },
+  "vocabulary_coverage_of_scoring_roles": {
+    "fusion_fit": {
+      "unigram_covered_percent": 96.88479609096035,
+      "combined_covered_percent": 80.73039787962742,
+      "bigram_covered_percent": 63.57066712448545
+    },
+    "fusion_calibration": {
+      "unigram_covered_percent": 96.86776215092269,
+      "combined_covered_percent": 81.41365946291332,
+      "bigram_covered_percent": 64.8751722986964
+    },
+    "validation": {
+      "unigram_covered_percent": 97.25497959145197,
+      "combined_covered_percent": 82.78099154731616,
+      "bigram_covered_percent": 67.24357179719834
+    }
+  },
+  "unusable_text": {
+    "definition_confirmed_by_leads": false,
+    "empty_raw_description_rows": 0,
+    "empty_cleaned_payload_rows": 0,
+    "zero_vector_after_tokenisation_rows": 3,
+    "note": "No fallback flag is emitted: the agreed schema has no column for one and the definition is unconfirmed. Rows with a zero vector still receive a probability, which is the model intercept rather than a text signal."
+  },
+  "output": {
+    "path": "data/nlp/tfidf_scores_v2.parquet",
+    "rows": 48724,
+    "columns": [
+      "loan_id",
+      "split",
+      "role",
+      "raw_margin",
+      "raw_prob",
+      "model_version"
+    ],
+    "sha256": "02fb68561051b82755e3a6279677ec0033542889d16cd2151c0dcb1b69cfac1e"
+  },
+  "pipeline_artifact": {
+    "path": "artifacts/nlp/tfidf_fusion_v2_pipeline.joblib",
+    "sha256": "db4ba92f7bbd71c1b91098667993bbfc1e7b8975306ed0d229b665d717c92177",
+    "gitignored": true,
+    "note": "Convenience for inference. The contract is this manifest: the pipeline rebuilds deterministically from the pinned config, seed and base_fit rows."
+  },
+  "inputs": {
+    "role_mapping": {
+      "path": "data/fusion/fusion_roles_v1.csv",
+      "sha256": "68599e30673a8099feadd3c7961f70dcc72bf082266d4a891c2e48f54664b20e"
+    },
+    "config": {
+      "path": "configs/nlp_tfidf_fusion_v2.toml",
+      "sha256": "bd9f7bea8f75913cf878cfa6945f0d9a4797897e62c0ea19e5a284a8f9ca469a"
+    },
+    "split_manifest_sha256": "41686f71f2534616e565b5ea7b78873cd2222f5079b235c179942192ac898e48"
+  },
+  "test_rows_used": 0,
+  "environment": {
+    "python": "3.13.3",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1"
+  }
+}
