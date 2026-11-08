@@ -4,8 +4,10 @@ From the repository root, show each check and its actual pytest result with:
     python -m pytest src/tabular/test_fusion_handoff_v1.py -v -s
 
 Nothing here reads data/raw/loan.csv, so no test is skipped for a missing
-LENDINGCLUB_RAW_CSV. The "committed" test needs the six tables and two
-manifests written by ``python -m src.tabular.fusion_handoff_v1``.
+LENDINGCLUB_RAW_CSV. The two real-table tests run twice: on tables built in
+memory from the pinned sources, and on the committed parquet files read
+directly. The "committed" cases need the six tables and two manifests written
+by ``python -m src.tabular.fusion_handoff_v1``.
 
 Fixture sources are written at the real config's relative paths under
 ``tmp_path`` and re-pinned after every edit, so each bad-file case reaches the
@@ -179,16 +181,27 @@ def build(root: Path, config: dict[str, Any]) -> dict[str, dict[str, pd.DataFram
 # --------------------------------------------------------------------------- real sources
 
 
-@pytest.fixture(scope="module")
-def real_tables() -> dict[str, dict[str, pd.DataFrame]]:
-    config = load_handoff_config()
-    mapping = load_role_mapping(config)
-    return build_handoff_tables(config, mapping, load_all_scores(config, mapping))
+@pytest.fixture(scope="module", params=["built", "committed"])
+def real_tables(request: pytest.FixtureRequest) -> dict[str, dict[str, pd.DataFrame]]:
+    """The six real tables, either built in memory from the pinned sources or read straight from the
+    committed parquet files (no rebuild), so the same checks run on both."""
+    if request.param == "built":
+        config = load_handoff_config()
+        mapping = load_role_mapping(config)
+        return build_handoff_tables(config, mapping, load_all_scores(config, mapping))
+    return {
+        table: {
+            role: pd.read_parquet(REPOSITORY_ROOT / "data" / "fusion" / f"fusion_v1_{table}_{role}.parquet")
+            for role in SCORING_ROLES
+        }
+        for table in TABLE_COLUMNS
+    }
 
 
 def test_real_tables_have_the_agreed_rows_columns_and_labels(real_tables) -> None:
-    """Real sources: six tables of 15,587 / 11,353 / 21,784 loans, the agreed columns, IDs and labels equal
-    the committed role mapping's, roles disjoint, no base_fit or locked test loan."""
+    """Real tables (built and committed): six tables of 15,587 / 11,353 / 21,784 loans, the agreed columns,
+    unique sorted IDs and labels equal the committed role mapping's, roles disjoint, no base_fit or locked
+    test loan, and every score a float64 probability in [0, 1]."""
     mapping = pd.read_csv(REPOSITORY_ROOT / "data" / "fusion" / "fusion_roles_v1.csv", dtype=str).set_index("loan_id")
     test_ids = set(pd.read_csv(REPOSITORY_ROOT / "data" / "test_ids.csv", dtype=str)["loan_id"])
     assert set(real_tables) == set(TABLE_COLUMNS)
@@ -198,6 +211,11 @@ def test_real_tables_have_the_agreed_rows_columns_and_labels(real_tables) -> Non
         for role, frame in frames.items():
             assert frame.columns.tolist() == TABLE_COLUMNS[table]
             assert len(frame) == REAL_ROLE_ROWS[role]
+            assert frame["loan_id"].is_unique and frame["loan_id"].is_monotonic_increasing
+            for column in (c for c in frame.columns if c.startswith("p_default_")):
+                values = frame[column]
+                assert values.dtype == np.float64
+                assert np.isfinite(values).all() and values.between(0, 1).all()
             ids = set(frame["loan_id"])
             assert ids == set(mapping.index[mapping["role"].eq(role)])
             assert not ids & seen and not ids & test_ids
@@ -212,8 +230,9 @@ def test_real_tables_have_the_agreed_rows_columns_and_labels(real_tables) -> Non
 
 
 def test_real_scores_equal_their_sources_and_versions_agree(real_tables) -> None:
-    """Real sources: every score equals its source file's value for that loan_id, each version column is its
-    pin, and the two-score and three-score tables of a role share identical loans and tabular / TF-IDF values."""
+    """Real tables (built and committed): every score equals its source file's value for that loan_id, each
+    version column is its pin, and the two-score and three-score tables of a role share identical loans and
+    tabular / TF-IDF values."""
     config = load_handoff_config()
     tabular = pd.concat(
         pd.read_csv(REPOSITORY_ROOT / entry["path"], dtype={"loan_id": str}) for entry in config["sources"]["tabular"]["files"]
