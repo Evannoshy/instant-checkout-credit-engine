@@ -1,0 +1,48 @@
+handoff_version = "fusion-handoff-v1"
+status = "development"
+fusion_development_version = "fusion_development_v1"
+
+[role_mapping]
+path = "data/fusion/fusion_roles_v1.csv"
+sha256 = "68599e30673a8099feadd3c7961f70dcc72bf082266d4a891c2e48f54664b20e"
+
+[sources.tabular]
+model_name = "logistic_regression"
+model_version = "tabular-logistic-v1-model-fit"
+probability_column = "p_default_tabular"
+
+[[sources.tabular.files]]
+path = "reports/tabular/raw_predictions/logistic_regression_calibration.csv"
+sha256 = "d16f15f0b6dbd27ed93dba4f96fb19631b5a22cabb4acdfe13fb8ef95835a532"
+file_split = "calibration"
+roles = ["fusion_fit", "fusion_calibration"]
+
+[[sources.tabular.files]]
+path = "reports/tabular/raw_predictions/logistic_regression_validation.csv"
+sha256 = "84d845fcabd097aead2f70f0ca017c324d7abfa6db0a313fe8c851586759fbc9"
+file_split = "validation"
+roles = ["validation"]
+
+[sources.tfidf]
+path = "data/nlp/tfidf_scores_v2.parquet"
+sha256 = "02fb68561051b82755e3a6279677ec0033542889d16cd2151c0dcb1b69cfac1e"
+model_name = "tfidf_logistic"
+model_version = "nlp-tfidf-fusion-v2"
+owner_manifest = "reports/nlp/tfidf_scores_v2_manifest.json"
+owner_manifest_sha256_key = ["output", "sha256"]
+
+[sources.distilbert]
+path = "data/nlp/distilbert_scores_v2.parquet"
+sha256 = "c2f8017a02d9a6af7d84041c0534d88c123f65332ceac74886bc15e50d7c19b0"
+model_name = "distilbert-base-uncased"
+model_version = "nlp-distilbert-fusion-v2"
+owner_manifest = "reports/nlp/distilbert_scores_v2_manifest.json"
+owner_manifest_sha256_key = ["checksums", "distilbert_scores_v2.parquet"]
+
+[tables.two_score]
+version = "fusion-handoff-v1-two-score"
+tracks = ["tabular", "tfidf"]
+
+[tables.three_score]
+version = "fusion-handoff-v1-three-score"
+tracks = ["tabular", "tfidf", "distilbert"]
