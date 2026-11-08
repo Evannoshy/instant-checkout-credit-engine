@@ -1,0 +1,159 @@
+{
+  "pipeline_version": "tabular-pipeline-v1",
+  "model_name": "logistic_regression",
+  "model_version": "tabular-logistic-v1-model-fit",
+  "status": "development",
+  "cohort": "real_text_matured_v1",
+  "split_version": "split-v1",
+  "dataset_version": "kaggle-adarshsng-local-2026-09-09",
+  "feature_set_version": "tabular_features_v1",
+  "development_version": "tabular_development_v1",
+  "calibration_version": "tabular_calibration_v1",
+  "params": {
+    "C": 1.0,
+    "class_weight": "balanced",
+    "max_iter": 1000,
+    "random_state": 42
+  },
+  "fit_rows": {
+    "role": "model_fit",
+    "rows": 59353
+  },
+  "artifact": {
+    "path": "artifacts/tabular/tabular_logistic_v1_model_fit.joblib",
+    "sha256": "bbfe6146e77b5bdc2362f9c1423dfe4e8faecf8767b4806bcd3718c7b1a9b427",
+    "format": "joblib",
+    "contents": "fitted sklearn Pipeline: preprocess (impute, scale, one-hot) + LogisticRegression",
+    "gitignored": true,
+    "load_with": {
+      "scikit_learn": "1.9.1",
+      "joblib": "1.6.0"
+    },
+    "verify_before_loading": "joblib.load can run code: check this sha256 first",
+    "rebuild": "python -m src.tabular.export_tabular_pipeline --raw-csv data/raw/loan.csv"
+  },
+  "input_contract": {
+    "feature_set_version": "tabular_features_v1",
+    "columns": [
+      {
+        "name": "loan_amnt",
+        "kind": "numeric"
+      },
+      {
+        "name": "annual_inc_log",
+        "kind": "numeric"
+      },
+      {
+        "name": "dti",
+        "kind": "numeric"
+      },
+      {
+        "name": "revol_util",
+        "kind": "numeric"
+      },
+      {
+        "name": "delinq_2yrs",
+        "kind": "numeric"
+      },
+      {
+        "name": "inq_last_6mths",
+        "kind": "numeric"
+      },
+      {
+        "name": "credit_history_months",
+        "kind": "numeric"
+      },
+      {
+        "name": "term",
+        "kind": "categorical"
+      },
+      {
+        "name": "home_ownership",
+        "kind": "categorical"
+      }
+    ],
+    "categories": {
+      "term": [
+        "36",
+        "60"
+      ],
+      "home_ownership": [
+        "MORTGAGE",
+        "OWN",
+        "RENT",
+        "OTHER"
+      ]
+    },
+    "built_by": "src/tabular/preprocess.py _build_features (Stage A)",
+    "input_form": "pandas DataFrame with exactly these columns, in this order; one row per loan",
+    "missing_values": "allowed; imputed by the pipeline (numeric: median, categorical: 'missing')",
+    "documentation": "reports/tabular/tabular_pipeline_v1.md"
+  },
+  "output": {
+    "raw": "predict_proba(X)[:, 1]: the raw probability; the stacker's tabular input",
+    "calibrated": "reference_calibrator applied to the raw probability: the tabular-only fallback PD"
+  },
+  "reproduction": {
+    "rtol": 1e-10,
+    "atol": 1e-10,
+    "sets": {
+      "calibration": {
+        "rows": 26940,
+        "max_abs_difference": 2.653433028854124e-13,
+        "committed_file": "reports/tabular/raw_predictions/logistic_regression_calibration.csv",
+        "committed_sha256_lf": "d16f15f0b6dbd27ed93dba4f96fb19631b5a22cabb4acdfe13fb8ef95835a532"
+      },
+      "validation": {
+        "rows": 21784,
+        "max_abs_difference": 2.680078381445128e-13,
+        "committed_file": "reports/tabular/raw_predictions/logistic_regression_validation.csv",
+        "committed_sha256_lf": "84d845fcabd097aead2f70f0ca017c324d7abfa6db0a313fe8c851586759fbc9"
+      }
+    }
+  },
+  "reference_calibrator": {
+    "method": "platt",
+    "slope": 0.9912598551922507,
+    "intercept": -1.7735760950997155,
+    "probability_clip": 1e-06,
+    "formula": "sigmoid(slope * logit(clip(p_raw, clip, 1 - clip)) + intercept)",
+    "calibration_version": "tabular_calibration_v1",
+    "fit_on": "tabular_development_v1 calibration role (26,940 loans: fusion_fit + fusion_calibration)",
+    "reproduced_against": [
+      "reports/tabular/calibration_metrics.json",
+      "reports/tabular/calibration_results.csv"
+    ],
+    "reproduction_tolerance": 1e-06,
+    "calibration_metrics_sha256": "05cdc0d23ffcf0c17b02acd13f451f48bf66306b513f14e77c8c645faf585233"
+  },
+  "inputs_sha256": {
+    "data/raw/loan.csv": "23783ef320e4df24ac113d6e5b830edb909912b7783d49b89aacd5690dc9120c",
+    "data/split_manifest.csv": "35e3545ee7a8a1221e1936ec22a4ef7951deea0936cc6b645035da2c4486a01f",
+    "data/split_statistics.json": "0f2ab221cfc16219ec1fb2c9b195a22281cca1aab86913d6853d1ac03d6e09ba",
+    "configs/tabular_features_v1.toml": "fba733fc9674a2116f81fe2dd3d4442f0a5b29a672c8ba57ba8a4cdc9d753a4e",
+    "configs/tabular_logistic_v1.toml": "81acb62fc0bab8bbda1f9ea6c33a88a9f0b844883f85b56aa230d21d2977fa02",
+    "configs/tabular_development_v1.toml": "10de0a4424e7e5b9ab19b58e23a3a5152507ba59f64c9bfa180df7ea79802151",
+    "configs/tabular_calibration_v1.toml": "cae057cae17fc744c7d062f95dd6aaf4930d1c81eb70bf0f161c326a19cb7380",
+    "configs/fusion_handoff_v1.toml": "622293e04a57e55ae4cbcd5248f3a9aeb122234de52c56bff2526b736709969e",
+    "reports/tabular/calibration_metrics.json": "05cdc0d23ffcf0c17b02acd13f451f48bf66306b513f14e77c8c645faf585233",
+    "reports/tabular/calibration_results.csv": "06bbf81337d88dabf30becc565e9ad753d6be21e27a45ba654a9b08b6a4e471c"
+  },
+  "test_rows_available_to_model": 0,
+  "commands": [
+    "python -m pip install -r src/tabular/requirements.txt",
+    "python -m src.tabular.export_tabular_pipeline --raw-csv data/raw/loan.csv",
+    "python -m pytest src/tabular/test_export_tabular_pipeline.py -v -s"
+  ],
+  "environment": {
+    "python": "3.13.9",
+    "pandas": "3.0.5",
+    "numpy": "2.5.3",
+    "scikit_learn": "1.9.1",
+    "xgboost": "3.4.1",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0",
+    "pyarrow": "23.0.1",
+    "platform": "Windows",
+    "machine": "AMD64"
+  }
+}
