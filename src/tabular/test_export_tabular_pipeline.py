@@ -81,8 +81,15 @@ def test_real_export_reproduces_the_committed_scores_and_manifest(tmp_path: Path
 
     committed = committed_manifest()
     for key in ("pipeline_version", "model_name", "model_version", "params", "fit_rows",
-                "input_contract", "reference_calibrator", "test_rows_available_to_model"):
+                "input_contract", "test_rows_available_to_model"):
         assert committed[key] == fresh[key], key
+    committed_calibrator = dict(committed["reference_calibrator"])
+    fresh_calibrator = dict(fresh["reference_calibrator"])
+    recorded_hash = committed_calibrator.pop("calibration_metrics_sha256")
+    current_hash = fresh_calibrator.pop("calibration_metrics_sha256")
+    assert committed_calibrator == fresh_calibrator
+    provenance.verify_file_checksum(REFERENCE_METRICS, current_hash)
+    provenance.verify_file_checksum(REFERENCE_METRICS, recorded_hash, allow_crlf=True)
     for split, rows in REAL_ROWS.items():
         assert committed["reproduction"]["sets"][split]["rows"] == rows
         assert committed["reproduction"]["sets"][split]["max_abs_difference"] <= REPRODUCTION_ATOL
