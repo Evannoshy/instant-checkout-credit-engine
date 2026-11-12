@@ -146,6 +146,43 @@ def test_artifact_for_another_variant_is_refused(tmp_path):
         predict.load_predictor("tabular_tfidf", artifact_dir=tmp_path)
 
 
+@pytest.mark.parametrize("edit", [
+    lambda a: a["stacker"].update(coefficients=[float("nan")]),
+    lambda a: a["stacker"].update(coefficients=[float("inf")]),
+    lambda a: a["stacker"].update(coefficients=["0.3"]),
+    lambda a: a["stacker"].update(coefficients=[True]),
+    lambda a: a["stacker"].update(intercept=float("-inf")),
+    lambda a: a["calibrator"].update(slope=float("nan")),
+    lambda a: a["calibrator"].update(intercept=float("inf")),
+    lambda a: a["calibrator"].update(probability_clip=float("nan")),
+])
+def test_nonfinite_or_nonnumeric_model_parameters_are_refused(tmp_path, edit):
+    """A malformed saved model is refused before it can return an invalid PD."""
+    source = REPOSITORY_ROOT / "data" / "fusion" / "stacker_v1" / "tabular_only.json"
+    artifact = json.loads(source.read_text(encoding="utf-8"))
+    edit(artifact)
+    (tmp_path / "tabular_only.json").write_text(json.dumps(artifact), encoding="utf-8")
+    with pytest.raises(ValueError, match=_message("bad_parameter")):
+        predict.load_predictor("tabular_only", artifact_dir=tmp_path)
+
+
+@pytest.mark.parametrize("clip", [0, -1e-6, 0.5, 1.0])
+def test_invalid_platt_clipping_range_is_refused(clip):
+    """The same clipping constraint applies to the stacker and tabular fallback."""
+    with pytest.raises(ValueError, match=_message("bad_clip")):
+        PlattMapping(slope=1.0, intercept=0.0, clip=clip)
+
+
+@pytest.mark.parametrize("text_usable", [True, False])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -0.1, 1.1])
+def test_invalid_final_probability_is_never_returned(monkeypatch, text_variant, text_usable, value):
+    """Both serving paths reject an invalid result even when their input scores are valid."""
+    monkeypatch.setattr(PlattMapping, "apply", lambda self, p: value)
+    scores = {"tabular": 0.3, "tfidf": 0.2} if text_usable else {"tabular": 0.3}
+    with pytest.raises(ValueError, match=_message("bad_output")):
+        predict.predict(text_variant, scores, text_usable=text_usable)
+
+
 def test_three_score_predictor_reproduces_committed_validation_predictions():
     predictor = predict.load_predictor("tabular_tfidf_distilbert")
     committed = pd.read_parquet(REPOSITORY_ROOT / "data" / "fusion" / "stacker_v1" / "predictions_validation.parquet")

@@ -69,7 +69,27 @@ ERROR_MESSAGES: dict[str, str] = {
     ),
     "artifact_mismatch": "Artifact {path} is for {actual!r}, not {expected!r}",
     "artifact_field": "Artifact {path} {field} is {actual!r}; expected {expected!r}",
+    "bad_parameter": "Model parameter {field} must be a finite number; got {value!r}",
+    "bad_clip": "Platt probability_clip must lie strictly between 0 and 0.5; got {value!r}",
+    "bad_output": "Prediction must be a finite probability in [0, 1]; got {value!r}",
 }
+
+
+def _check_parameter(field: str, value: Any) -> None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise ValueError(ERROR_MESSAGES["bad_parameter"].format(field=field, value=value))
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:
+        finite = False
+    if not finite:
+        raise ValueError(ERROR_MESSAGES["bad_parameter"].format(field=field, value=value))
+
+
+def _checked_output(value: float) -> float:
+    if not math.isfinite(value) or not 0 <= value <= 1:
+        raise ValueError(ERROR_MESSAGES["bad_output"].format(value=value))
+    return float(value)
 
 
 @dataclass(frozen=True)
@@ -79,6 +99,13 @@ class PlattMapping:
     slope: float
     intercept: float
     clip: float
+
+    def __post_init__(self) -> None:
+        for field, value in (("Platt slope", self.slope), ("Platt intercept", self.intercept),
+                             ("probability_clip", self.clip)):
+            _check_parameter(field, value)
+        if not 0 < self.clip < 0.5:
+            raise ValueError(ERROR_MESSAGES["bad_clip"].format(value=self.clip))
 
     def apply(self, p: float) -> float:
         clipped = min(max(p, self.clip), 1 - self.clip)
@@ -95,6 +122,11 @@ class FusionPredictor:
     calibrator: PlattMapping
     fallback: PlattMapping
     fallback_version: str
+
+    def __post_init__(self) -> None:
+        _check_parameter("stacker intercept", self.intercept)
+        for index, coefficient in enumerate(self.coefficients):
+            _check_parameter(f"stacker coefficient {index}", coefficient)
 
     def stacker_probability(self, values: list[float]) -> float:
         """The raw stacker output: logistic regression on the probabilities, as fitted."""
@@ -198,7 +230,7 @@ def predict(predictor: FusionPredictor, scores: Mapping[str, float | None], *, t
         if text_given:
             raise ValueError(ERROR_MESSAGES["text_score_without_text"].format(tracks=text_given))
         return {
-            "p_default": predictor.fallback.apply(tabular),
+            "p_default": _checked_output(predictor.fallback.apply(tabular)),
             "source": SOURCE_FALLBACK,
             "fallback": True,
             "text_usable": False,
@@ -208,7 +240,7 @@ def predict(predictor: FusionPredictor, scores: Mapping[str, float | None], *, t
 
     values = [_checked_score(track, scores.get(track)) for track in predictor.tracks]
     return {
-        "p_default": predictor.calibrator.apply(predictor.stacker_probability(values)),
+        "p_default": _checked_output(predictor.calibrator.apply(predictor.stacker_probability(values))),
         "source": SOURCE_STACKER,
         "fallback": False,
         "text_usable": True,
