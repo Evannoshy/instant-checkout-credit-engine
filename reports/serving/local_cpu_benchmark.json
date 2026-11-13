@@ -1,0 +1,21 @@
+{
+  "model_load_ms": 9.933300010743551,
+  "variant": "tabular_only",
+  "text_policy": "payload",
+  "scope": "sequential loopback HTTP: parsing, validation, features, models, fusion and response",
+  "requests": 200,
+  "warmup": 10,
+  "concurrency": 1,
+  "http_ms": {
+    "p50": 40.8949999982724,
+    "p95": 54.374160010047476,
+    "p99": 64.36512999323874
+  },
+  "mean_model_processing_ms": 28.74173249983869,
+  "environment": {
+    "python": "3.13.15",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel"
+  },
+  "limitations": "One fictional payload on this machine. Not a deployment SLA, concurrency or GPU benchmark."
+}

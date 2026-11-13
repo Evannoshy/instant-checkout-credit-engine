@@ -1,0 +1,20 @@
+{
+  "application_id": "fictional_demo_001",
+  "decision_month": "Nov-2013",
+  "tabular": {
+    "loan_amnt": 10000,
+    "annual_inc": 60000,
+    "dti": 15.2,
+    "revol_util": 35.0,
+    "delinq_2yrs": 0,
+    "inq_last_6mths": 1,
+    "term": "36 months",
+    "home_ownership": "RENT",
+    "earliest_cr_line": "Jan-2005"
+  },
+  "text": {
+    "title": "Debt consolidation",
+    "purpose": "debt_consolidation",
+    "desc": "I would like to combine my credit card balances into one monthly payment. I have a steady salary and have budgeted for the repayments."
+  }
+}
