@@ -1,8 +1,8 @@
 # System Architecture
 
 **Document status:** Implementation snapshot plus proposed serving architecture<br>
-**Version:** 0.2<br>
-**Updated:** 17 October 2026 (initial design: 7 September 2026)<br>
+**Version:** 0.3<br>
+**Updated:** 13 November 2026 (initial design: 7 September 2026)<br>
 **Owner:** Tabular Track Tech Lead<br>
 **Reviewers:** NLP Track Lead, Fusion/API Lead and project co-leads
 
@@ -18,13 +18,13 @@ The evidence pipeline uses the [locked LendingClub cohort](cohort-definition.md)
 |---|---|---|
 | Data and features | Shared chronological split, source checksum checks, nine-feature tabular preprocessing, text cleaning | Representative checkout data and production input/freshness schema |
 | Tabular modeling | Constant/LR/XGBoost, bounded search, calibration and unweighted LR comparison under `src/tabular/` | Release package, robustness/subgroup evidence and production policy |
-| NLP | TF-IDF, DistilBERT prototypes, lexical analysis and score/description-only exports under `src/nlp/` | Matched incremental-value comparison and calibrated fusion inputs |
-| Fusion | [Tabular OOF manifest](../data/tabular/tabular_oof_train_v1_manifest.json), NLP score exports | Compatible fold/role protocol, fusion training and evaluation |
-| Serving | Proposed contracts below | API, fallback implementation, compatible model bundle and latency benchmark |
+| NLP | TF-IDF and DistilBERT v2 score exports aligned to common fusion roles | Verified original inference artifacts available to the demo operator |
+| Fusion | Shared role mapping, two- and three-score validation comparison, calibrated stacker and fallback | Final variant choice and final-test gate |
+| Serving | Local API/form, Stage A reuse, checked bundle loader and benchmark command under `src/serving/` | Private checkpoint verification, multimodal live parity and deployment |
 
 Tabular development uses 59,353 `model_fit` rows and 26,940 calibration rows within the frozen 86,293-row training split; validation has 21,784 rows. The final test remains locked. The [calibration comparison](../reports/tabular/candidate_comparison.md) retains balanced LR + Platt as its reference. The later unweighted experiment does not approve a replacement.
 
-The tabular OOF export contains 35,234 chronological holdout rows; the earliest 24,119 `model_fit` rows are fitting-only. TF-IDF OOF covers all 86,293 training rows using shuffled folds, including months reserved for tabular calibration. DistilBERT uses two 10k-loan fitting sets. These exports cannot be assumed to share fitting histories or calibration isolation because they share IDs. Agree eligible fusion rows, time boundaries and calibration ownership before training or claiming time-respecting fusion evidence. The existing balanced-model exports are raw scores, not calibrated PDs.
+The historical v1 OOF files have incompatible fitting histories and remain separate from current fusion. The current protocol fits base models within 59,353 `base_fit` loans, fits the stacker on 15,587 `fusion_fit` loans, and fits its Platt calibrator on 11,353 `fusion_calibration` loans. Validation has 21,784 loans. Fusion receives raw base-model probabilities; the existing calibrated tabular reference is used only as a benchmark and missing-text fallback. See [the fusion report](../reports/fusion/stacker_v1_report.md) and [local demo guide](local-demo.md).
 
 ## 2. Architectural principles
 
@@ -123,10 +123,11 @@ sequenceDiagram
     V->>F: Valid structured fields
     V->>N: Valid transaction text
     F->>T: Ordered point-in-time feature vector
-    T->>P: Raw margin and raw PD
-    P->>U: Calibrated tabular PD + version + flags
-    N->>U: Text score + version + flags
-    U->>D: Fused PD/score + modality status
+    T->>U: Raw tabular probability + version
+    T->>P: Raw tabular probability for fallback
+    P-->>D: Calibrated tabular fallback when text is unusable
+    N->>U: Raw v2 text probabilities + versions
+    U->>D: Calibrated fused PD + modality status
     D->>A: Decision, versions, timing and quality metadata
     D-->>C: APPROVE / DECLINE / REFER / INSUFFICIENT_DATA
 ```

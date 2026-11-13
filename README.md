@@ -6,13 +6,13 @@ The project is led by NUS FinTech Society. Ariel and Evan are project co-leads; 
 
 ## Project status
 
-**Repository snapshot:** 17 October 2026<br>
-**Current work:** model comparison, calibration and cross-track score handoffs<br>
+**Repository snapshot:** 13 November 2026<br>
+**Current work:** local demo integration, model handoff and final evaluation preparation<br>
 **Planning period:** 7 September to 30 November 2026
 
 The repository contains executable preprocessing, constant/logistic/XGBoost baselines, calibration comparisons, TF-IDF and DistilBERT experiments, tests, and versioned score exports. The [tabular calibration report](reports/tabular/candidate_comparison.md) retains balanced logistic regression with Platt calibration as its reference under the predeclared selection rule. The newer [unweighted logistic comparison](reports/tabular/unweighted_lr_comparison.md) does not approve replacing that reference.
 
-Fusion, a serving API, a packaged inference bundle, and end-to-end latency evidence are still pending. There is no measured sub-100 ms serving result in this repository. Gate dates in the [handbook](docs/tabular-analyst-handbook.md) are the original plan; they do not establish that a gate passed.
+The [late-fusion comparison](reports/fusion/stacker_v1_report.md) is complete on validation. A [local API and demonstration form](docs/local-demo.md) connect raw borrower fields to the existing tabular model and fusion predictor. Tabular inference is available after rebuilding the local bundle. Live TF-IDF and DistilBERT routes require their verified original artifacts. Final model selection, deployment and the locked final evaluation are pending. Gate dates in the [handbook](docs/tabular-analyst-handbook.md) are the original plan; they do not establish that a gate passed.
 
 ## What the current models predict
 
@@ -37,9 +37,11 @@ The following are **validation** results on the same 21,784 loans, not final-tes
 | Balanced tabular LR + Platt | 0.6660 | 0.2575 | 0.1225 | 0.4031 | [Calibration comparison](reports/tabular/candidate_comparison.md) |
 | Selected XGBoost, raw | 0.6661 | 0.2584 | 0.1224 | 0.4030 | [Calibration comparison](reports/tabular/candidate_comparison.md) |
 | Unweighted tabular LR, raw | 0.6662 | 0.2582 | 0.1225 | 0.4032 | [Unweighted comparison](reports/tabular/unweighted_lr_comparison.md) |
+| Tabular + TF-IDF + Platt | 0.6756 | 0.2628 | 0.1218 | 0.4004 | [Fusion comparison](reports/fusion/stacker_v1_report.md) |
+| Tabular + TF-IDF + DistilBERT + Platt | 0.6791 | 0.2665 | 0.1215 | 0.3992 | [Fusion comparison](reports/fusion/stacker_v1_report.md) |
 | Tuned TF-IDF + balanced LR, raw | 0.5867 | 0.1944 | 0.2466 | 0.6867 | [NLP tuning report](docs/nlp-tuning-report.md) |
 
-XGBoost and unweighted LR have not demonstrated a replacement-worthy gain over the calibrated tabular reference under the recorded margins and paired intervals. The TF-IDF probabilities are uncalibrated. These text-only metrics do not establish whether text adds information beyond tabular scores; that needs a matched fusion comparison. DistilBERT reports use smaller training/validation samples and validation-based checkpoint selection, so they are not directly ranked in this table.
+XGBoost and unweighted LR have not demonstrated a replacement-worthy gain over the calibrated tabular reference under the recorded margins and paired intervals. The fusion comparison shows a modest validation gain from combining the three scores; it does not approve a final champion. Base-model text probabilities remain raw stacker inputs. Earlier NLP v1 experiments use different fitting histories and are not the live v2 fusion inputs.
 
 ## Score handoffs and integration gaps
 
@@ -48,7 +50,16 @@ XGBoost and unweighted LR have not demonstrated a replacement-worthy gain over t
 - **DistilBERT scores:** train and validation Parquets are in `data/nlp/`. Two separately trained 10k-loan models avoid scoring their own fitting loans; the probabilities remain uncalibrated. See [the exporter](src/nlp/export_distilbert_scores.py) and `reports/nlp/distilbert_*metrics.json`.
 - **Description-only distress density:** [the handoff](docs/nlp-desc-distress-export.md) covers 108,077 train/validation loans. D-017 remains proposed; exporting the feature does not add it to `tabular_features_v1`.
 
-Join by verified `loan_id` and split, never row position. Matching IDs alone does not align fitting histories: shuffled NLP folds can use later months, and NLP training includes the tabular calibration months. Before treating combined scores as time-respecting fusion evidence, agree common fitting/holdout boundaries, calibration roles, eligible rows and a frozen evaluation protocol. Raw balanced-model scores must not be interpreted as calibrated default risk or silently passed through a calibrator fitted to another model.
+The bullets above describe historical v1 exports. The current fusion experiment uses `data/fusion/fusion_roles_v1.csv`: 59,353 base-fitting loans, 15,587 fusion-fitting loans, 11,353 fusion-calibration loans and 21,784 validation loans. The v2 NLP exports cover the same 48,724 scoring loans. See [the current fusion report](reports/fusion/stacker_v1_report.md). Join by verified `loan_id`, split and role. The old shuffled OOF exports are not substitutes for these inputs. Fusion consumes raw base-model probabilities and calibrates the stacked output.
+
+## Local demo
+
+```powershell
+python -m src.serving.prepare_bundle --raw-csv "C:/path/to/loan.csv"
+python -m src.serving.api --variant tabular_only --text-policy payload
+```
+
+Open `http://127.0.0.1:8000` and use fictional details. The explicit variant and text rule are preview settings, not final project decisions. See [setup, artifact requirements and API details](docs/local-demo.md).
 
 ## Setup and checks
 
@@ -91,18 +102,20 @@ These commands regenerate evidence artifacts. Use a working branch and review th
 |-- scripts/                 # Cohort reproduction and data-integrity checks
 |-- src/
 |   |-- tabular/             # Preprocessing, models, calibration, OOF and tests
-|   `-- nlp/                 # Text preprocessing, models, exports, notebooks and tests
+|   |-- nlp/                 # Text preprocessing, models, exports, notebooks and tests
+|   |-- fusion/              # Checked score inputs, stacker and prediction handoff
+|   `-- serving/             # Local borrower-field API, demo, bundle preparation and benchmark
 |-- CONTRIBUTING.md
 `-- updated-pitchdeck.pdf
 ```
 
-The deck and original milestone plans are planning artifacts. Current claims should follow the evidence reports. CI workflows, fusion/API source, a Dockerfile and a release model card have not yet been added.
+The deck and original milestone plans are planning artifacts. Current claims should follow the evidence reports. CI workflows, a Dockerfile, deployment and a final release model card remain pending.
 
 ## Guardrails and next work
 
 - Preserve frozen cohort IDs, labels, features and experiment configurations; changes need a new version and decision record.
 - Keep the final test locked until an approved evaluation gate. Validation has already informed selection and is not an untouched final estimate.
-- Resolve fusion fold/role compatibility and compare tabular-only, text-only and fused models on identical rows.
+- Keep the approved fusion roles and matched validation comparison intact; freeze the final variant and missing-text rule before release.
 - Complete supported subgroup/robustness checks, loss scenarios and policy ownership before adopting decision thresholds.
 - Package compatible preprocessing, model and calibration artifacts; implement contract/fallback tests and benchmark latency on agreed hardware.
 - Keep raw/restricted data, secrets, local environments and model binaries out of Git. Synthetic systems data cannot establish real-world accuracy, fairness or inclusion.
